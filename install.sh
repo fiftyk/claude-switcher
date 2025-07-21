@@ -38,7 +38,7 @@ check_old_version() {
         echo_info "建议删除旧版本以避免冲突"
         
         echo -n "是否删除旧版本？[y/N]: "
-        read -r remove_old
+        read -r remove_old < /dev/tty
         
         if [[ "$remove_old" =~ ^[yY] ]]; then
             # 删除旧脚本
@@ -54,7 +54,7 @@ check_old_version() {
             # 删除旧配置
             if [ -f "$old_config" ]; then
                 echo -n "是否同时删除旧配置文件？[y/N]: "
-                read -r remove_config
+                read -r remove_config < /dev/tty
                 
                 if [[ "$remove_config" =~ ^[yY] ]]; then
                     rm -f "$old_config"
