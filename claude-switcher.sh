@@ -626,14 +626,19 @@ run_claude_with_profile() {
         export https_proxy
     fi
     
-    # 检查出口IP
-    if ! get_exit_ip; then
-        # 恢复原始环境变量
-        export ANTHROPIC_AUTH_TOKEN="$original_token"
-        export ANTHROPIC_BASE_URL="$original_base_url" 
-        export http_proxy="$original_http_proxy"
-        export https_proxy="$original_https_proxy"
-        return 0
+    # 检查出口IP（仅在使用默认API地址时）
+    if [ -z "$base_url" ]; then
+        echo_info "使用默认API地址，检查网络连通性..."
+        if ! get_exit_ip; then
+            # 恢复原始环境变量
+            export ANTHROPIC_AUTH_TOKEN="$original_token"
+            export ANTHROPIC_BASE_URL="$original_base_url" 
+            export http_proxy="$original_http_proxy"
+            export https_proxy="$original_https_proxy"
+            return 0
+        fi
+    else
+        echo_info "使用自定义API地址，跳过IP检查: $base_url"
     fi
     
     echo_info "环境变量已设置"
