@@ -230,6 +230,8 @@ https_proxy="http://127.0.0.1:7890"
 - **Token**: 你的anyrouter token
 - **代理**: 留空
 
+> 💡 **推荐服务**: [anyrouter](https://anyrouter.top/register?aff=eg0D) 提供稳定的Claude API代理服务
+
 ### 代理配置  
 - **Base URL**: 留空(使用默认)
 - **Token**: 你的官方Claude token
