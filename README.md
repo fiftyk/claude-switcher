@@ -6,10 +6,12 @@
 
 - 🚀 **一键启动** - 运行 `claude-switcher` 即可开始使用
 - ⚡ **命令行参数** - 支持 `claude-switcher moonshot` 直接指定配置启动
-- 📋 **配置管理** - 创建和管理多个Claude配置
+- 📋 **配置管理** - 创建、重命名、复制、删除Claude配置
+- 🔍 **配置验证** - 自动验证URL格式、代理设置等配置有效性
 - 🔄 **快速切换** - 自动记住上次使用的配置，按回车快速启动  
 - 🌍 **智能IP检查** - 使用默认API时检查出口IP地址，使用自定义API时自动跳过
-- 🔒 **安全存储** - 配置文件权限保护
+- 🛡️ **安全增强** - 配置名称安全验证，防止路径遍历攻击
+- 🔒 **安全存储** - 配置文件权限保护，安全的环境变量处理
 - 🎯 **默认选项** - 所有菜单支持默认选项，按回车选择最常用操作
 - 💡 **灵活配置** - 支持空Token配置，便于创建模板和测试
 - 🔧 **脚本友好** - 完全支持在自动化脚本中使用
@@ -38,13 +40,16 @@ sudo mv claude-switcher.sh /usr/local/bin/claude-switcher
 # 交互式启动（原有方式）
 claude-switcher
 
-# 直接指定配置启动（新功能）
+# 直接指定配置启动
 claude-switcher moonshot
 claude-switcher --config work
 claude-switcher -c production
 
-# 查看所有可用配置
-claude-switcher --list
+# 配置管理
+claude-switcher --list                    # 查看所有可用配置
+claude-switcher --test moonshot           # 测试配置有效性
+claude-switcher --rename old new          # 重命名配置
+claude-switcher --copy source target      # 复制配置
 
 # 显示帮助信息
 claude-switcher --help
@@ -146,7 +151,44 @@ claude-switcher --list
 - `claude-switcher --config <配置名>` - 使用长参数格式
 - `claude-switcher -c <配置名>` - 使用短参数格式
 - `claude-switcher --list` - 列出所有配置
+- `claude-switcher --test <配置名>` - 测试配置有效性
+- `claude-switcher --rename <旧名称> <新名称>` - 重命名配置
+- `claude-switcher --copy <源名称> <目标名称>` - 复制配置
 - `claude-switcher --help` - 显示帮助信息
+
+### 配置管理功能
+
+#### 🔍 配置验证
+```bash
+# 测试配置是否有效
+claude-switcher --test moonshot
+
+# 输出示例：
+# ℹ 测试配置: moonshot
+# ⚠ 警告: 未设置 AUTH_TOKEN
+# ✓ 配置验证通过
+```
+
+#### 🔄 配置操作
+```bash
+# 重命名配置
+claude-switcher --rename old-name new-name
+
+# 复制配置
+claude-switcher --copy source-config backup-config
+```
+
+#### 🛡️ 安全增强
+- **配置名称验证**: 防止路径遍历攻击，拒绝包含 `../`、`~`、`$` 等危险字符
+- **输入格式验证**: 自动验证URL和代理地址格式
+- **安全的环境变量处理**: 程序退出时自动恢复原始环境变量
+
+```bash
+# 这些配置名称会被拒绝
+claude-switcher "../etc/passwd"  # ✗ 路径遍历攻击
+claude-switcher "name with space" # ✗ 包含空格
+claude-switcher ".hidden"         # ✗ 以点开头
+```
 
 ### 错误处理
 当指定的配置不存在时，会自动显示可用配置列表：

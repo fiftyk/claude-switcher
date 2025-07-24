@@ -16,6 +16,86 @@ CONFIG_DIR="$HOME/.claude-switcher"
 PROFILES_DIR="$CONFIG_DIR/profiles"
 ACTIVE_FILE="$CONFIG_DIR/active"
 
+# 安全验证函数
+validate_config_name() {
+    local name="$1"
+    
+    # 检查是否为空
+    if [ -z "$name" ]; then
+        return 1
+    fi
+    
+    # 检查长度限制
+    if [ ${#name} -gt 50 ]; then
+        echo_error "配置名称过长，请限制在50个字符以内"
+        return 1
+    fi
+    
+    # 检查是否包含危险字符
+    case "$name" in
+        */*|*\\*|*..*|*~*|*\$*)
+            echo_error "配置名称不能包含特殊字符: / \\ .. ~ \$"
+            return 1
+            ;;
+        .*|*.)
+            echo_error "配置名称不能以点开头或结尾"
+            return 1
+            ;;
+        *[[:space:]]*)
+            echo_error "配置名称不能包含空格"
+            return 1
+            ;;
+    esac
+    
+    return 0
+}
+
+# 验证URL格式
+validate_url() {
+    local url="$1"
+    
+    if [ -z "$url" ]; then
+        return 0  # 空值允许
+    fi
+    
+    # 基本URL格式检查
+    if [[ ! "$url" =~ ^https?://[a-zA-Z0-9.-]+([:/][^[:space:]]*)?$ ]]; then
+        echo_error "URL格式不正确，请使用 http:// 或 https:// 开头"
+        return 1
+    fi
+    
+    return 0
+}
+
+# 验证代理格式
+validate_proxy() {
+    local proxy="$1"
+    
+    if [ -z "$proxy" ]; then
+        return 0  # 空值允许
+    fi
+    
+    # 基本代理格式检查
+    if [[ ! "$proxy" =~ ^https?://[a-zA-Z0-9.-]+:[0-9]+$ ]]; then
+        echo_error "代理格式不正确，请使用格式: http://host:port"
+        return 1
+    fi
+    
+    return 0
+}
+
+# 安全地恢复环境变量
+restore_env_var() {
+    local var_name="$1"
+    local original_value="$2"
+    
+    if [ -z "$original_value" ]; then
+        unset "$var_name"
+    else
+        export "$var_name"="$original_value"
+    fi
+}
+
 # 命令行参数处理
 parse_arguments() {
     local config_name=""
@@ -34,6 +114,21 @@ parse_arguments() {
                 --list|-l)
                     list_available_configs
                     exit 0
+                    ;;
+                --test)
+                    echo_error "缺少配置名称"
+                    echo_info "用法: claude-switcher --test <配置名称>"
+                    exit 1
+                    ;;
+                --rename)
+                    echo_error "缺少参数"
+                    echo_info "用法: claude-switcher --rename <旧名称> <新名称>"
+                    exit 1
+                    ;;
+                --copy)
+                    echo_error "缺少参数"
+                    echo_info "用法: claude-switcher --copy <源名称> <目标名称>"
+                    exit 1
                     ;;
                 --config)
                     echo_error "缺少配置名称"
@@ -56,8 +151,29 @@ parse_arguments() {
                 --config|-c)
                     config_name="$2"
                     ;;
+                --test)
+                    test_config "$2"
+                    exit $?
+                    ;;
                 *)
                     echo_error "未知参数组合: $1 $2"
+                    show_help_info
+                    exit 1
+                    ;;
+            esac
+            ;;
+        3)
+            case "$1" in
+                --rename)
+                    rename_config "$2" "$3"
+                    exit $?
+                    ;;
+                --copy)
+                    copy_config "$2" "$3"
+                    exit $?
+                    ;;
+                *)
+                    echo_error "未知参数组合: $1 $2 $3"
                     show_help_info
                     exit 1
                     ;;
@@ -85,12 +201,18 @@ show_help_info() {
     echo "  claude-switcher <配置名称>         直接使用指定配置启动"
     echo "  claude-switcher --config <名称>    使用指定配置启动"
     echo "  claude-switcher --list             列出所有可用配置"
+    echo "  claude-switcher --test <名称>      测试配置有效性"
+    echo "  claude-switcher --rename <旧> <新> 重命名配置"
+    echo "  claude-switcher --copy <源> <目标>  复制配置"
     echo "  claude-switcher --help             显示此帮助信息"
     echo
     echo -e "${YELLOW}示例:${NC}"
     echo "  claude-switcher moonshot           # 直接启动moonshot配置"
     echo "  claude-switcher --config work      # 启动work配置"
     echo "  claude-switcher --list             # 查看所有配置"
+    echo "  claude-switcher --test moonshot    # 测试配置是否有效"
+    echo "  claude-switcher --rename old new   # 重命名配置"
+    echo "  claude-switcher --copy work home   # 复制配置"
     echo
     echo -e "${YELLOW}说明:${NC}"
     echo "  • 配置文件位于: ~/.claude-switcher/profiles/"
@@ -135,6 +257,13 @@ list_available_configs() {
 # 使用指定配置运行
 run_with_specified_config() {
     local config_name="$1"
+    
+    # 验证配置名称安全性
+    if ! validate_config_name "$config_name"; then
+        echo_error "配置名称格式不正确"
+        exit 1
+    fi
+    
     local config_file="$PROFILES_DIR/$config_name.conf"
     
     if [ ! -f "$config_file" ]; then
@@ -149,6 +278,130 @@ run_with_specified_config() {
     set_active_profile "$config_name"
     echo_info "使用配置: $config_name"
     run_claude_with_profile "$config_name"
+}
+
+# 测试配置有效性
+test_config() {
+    local config_name="$1"
+    local config_file="$PROFILES_DIR/$config_name.conf"
+    
+    if [ ! -f "$config_file" ]; then
+        echo_error "配置文件不存在: $config_name"
+        return 1
+    fi
+    
+    echo_info "测试配置: $config_name"
+    
+    # 读取配置
+    local auth_token base_url proxy_url
+    auth_token=$(grep "^ANTHROPIC_AUTH_TOKEN=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"')
+    base_url=$(grep "^ANTHROPIC_BASE_URL=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"')
+    proxy_url=$(grep "^http_proxy=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"')
+    
+    # 验证配置
+    local has_error=false
+    
+    if [ -z "$auth_token" ]; then
+        echo_warning "警告: 未设置 AUTH_TOKEN"
+    fi
+    
+    if [ -n "$base_url" ] && ! validate_url "$base_url"; then
+        echo_error "BASE_URL 格式错误: $base_url"
+        has_error=true
+    fi
+    
+    if [ -n "$proxy_url" ] && ! validate_proxy "$proxy_url"; then
+        echo_error "代理格式错误: $proxy_url"
+        has_error=true
+    fi
+    
+    if [ "$has_error" = true ]; then
+        echo_error "配置验证失败"
+        return 1
+    else
+        echo_success "配置验证通过"
+        return 0
+    fi
+}
+
+# 重命名配置
+rename_config() {
+    local old_name="$1"
+    local new_name="$2"
+    
+    if ! validate_config_name "$old_name" || ! validate_config_name "$new_name"; then
+        echo_error "配置名称格式不正确"
+        return 1
+    fi
+    
+    local old_file="$PROFILES_DIR/$old_name.conf"
+    local new_file="$PROFILES_DIR/$new_name.conf"
+    
+    if [ ! -f "$old_file" ]; then
+        echo_error "源配置不存在: $old_name"
+        return 1
+    fi
+    
+    if [ -f "$new_file" ]; then
+        echo_error "目标配置已存在: $new_name"
+        return 1
+    fi
+    
+    # 复制文件并更新NAME字段
+    cp "$old_file" "$new_file"
+    if grep -q "^NAME=" "$new_file"; then
+        sed -i.bak "s/^NAME=.*/NAME=\"$new_name\"/" "$new_file"
+        rm "$new_file.bak"
+    else
+        echo "NAME=\"$new_name\"" >> "$new_file"
+    fi
+    
+    # 删除原文件
+    rm "$old_file"
+    
+    # 更新活动配置
+    local current_active
+    current_active=$(get_active_profile)
+    if [ "$current_active" = "$old_name" ]; then
+        set_active_profile "$new_name"
+    fi
+    
+    echo_success "配置已重命名: $old_name -> $new_name"
+}
+
+# 复制配置
+copy_config() {
+    local source_name="$1"
+    local target_name="$2"
+    
+    if ! validate_config_name "$source_name" || ! validate_config_name "$target_name"; then
+        echo_error "配置名称格式不正确"
+        return 1
+    fi
+    
+    local source_file="$PROFILES_DIR/$source_name.conf"
+    local target_file="$PROFILES_DIR/$target_name.conf"
+    
+    if [ ! -f "$source_file" ]; then
+        echo_error "源配置不存在: $source_name"
+        return 1
+    fi
+    
+    if [ -f "$target_file" ]; then
+        echo_error "目标配置已存在: $target_name"
+        return 1
+    fi
+    
+    # 复制文件并更新NAME字段
+    cp "$source_file" "$target_file"
+    if grep -q "^NAME=" "$target_file"; then
+        sed -i.bak "s/^NAME=.*/NAME=\"$target_name\"/" "$target_file"
+        rm "$target_file.bak"
+    else
+        echo "NAME=\"$target_name\"" >> "$target_file"
+    fi
+    
+    echo_success "配置已复制: $source_name -> $target_name"
 }
 
 # 颜色输出函数
@@ -500,33 +753,76 @@ delete_profile() {
 create_new_profile() {
     echo_title "创建新配置"
     
-    # 1. 输入名称
-    echo -n -e "${YELLOW}请输入配置名称: ${NC}"
-    read -r profile_name
+    local profile_name base_url auth_token proxy
     
-    if [ -z "$profile_name" ]; then
-        echo_error "配置名称不能为空"
-        exit 1
-    fi
+    # 1. 输入和验证配置名称
+    while true; do
+        echo -n -e "${YELLOW}请输入配置名称: ${NC}"
+        read -r profile_name
+        
+        if validate_config_name "$profile_name"; then
+            # 检查名称是否已存在
+            if [ -f "$PROFILES_DIR/$profile_name.conf" ]; then
+                echo_error "配置 '$profile_name' 已存在"
+                echo -n -e "${YELLOW}是否重新输入？[y/N]: ${NC}"
+                read -r retry
+                if [[ ! "$retry" =~ ^[yY] ]]; then
+                    echo_info "返回主菜单"
+                    show_main_menu
+                    return
+                fi
+                continue
+            fi
+            break
+        else
+            echo -n -e "${YELLOW}是否重新输入？[y/N]: ${NC}"
+            read -r retry
+            if [[ ! "$retry" =~ ^[yY] ]]; then
+                echo_info "返回主菜单"
+                show_main_menu
+                return
+            fi
+        fi
+    done
     
-    # 检查名称是否已存在
-    if [ -f "$PROFILES_DIR/$profile_name.conf" ]; then
-        echo_error "配置 '$profile_name' 已存在"
-        exit 1
-    fi
-    
-    # 2. 输入 ANTHROPIC_BASE_URL
-    echo -n -e "${YELLOW}请输入 ANTHROPIC_BASE_URL (留空使用默认): ${NC}"
-    read -r base_url
+    # 2. 输入和验证 ANTHROPIC_BASE_URL
+    while true; do
+        echo -n -e "${YELLOW}请输入 ANTHROPIC_BASE_URL (留空使用默认): ${NC}"
+        read -r base_url
+        
+        if validate_url "$base_url"; then
+            break
+        else
+            echo -n -e "${YELLOW}是否重新输入？[y/N]: ${NC}"
+            read -r retry
+            if [[ ! "$retry" =~ ^[yY] ]]; then
+                base_url=""
+                break
+            fi
+        fi
+    done
     
     # 3. 输入 ANTHROPIC_AUTH_TOKEN
     echo -n -e "${YELLOW}请输入 ANTHROPIC_AUTH_TOKEN (留空跳过): ${NC}"
     read -s auth_token
     echo
     
-    # 4. 输入代理设置
-    echo -n -e "${YELLOW}请输入代理地址 (格式: http://host:port，留空不使用代理): ${NC}"
-    read -r proxy
+    # 4. 输入和验证代理设置
+    while true; do
+        echo -n -e "${YELLOW}请输入代理地址 (格式: http://host:port，留空不使用代理): ${NC}"
+        read -r proxy
+        
+        if validate_proxy "$proxy"; then
+            break
+        else
+            echo -n -e "${YELLOW}是否重新输入？[y/N]: ${NC}"
+            read -r retry
+            if [[ ! "$retry" =~ ^[yY] ]]; then
+                proxy=""
+                break
+            fi
+        fi
+    done
     
     # 生成配置文件
     local config_file="$PROFILES_DIR/$profile_name.conf"
@@ -631,10 +927,10 @@ run_claude_with_profile() {
         echo_info "使用默认API地址，检查网络连通性..."
         if ! get_exit_ip; then
             # 恢复原始环境变量
-            export ANTHROPIC_AUTH_TOKEN="$original_token"
-            export ANTHROPIC_BASE_URL="$original_base_url" 
-            export http_proxy="$original_http_proxy"
-            export https_proxy="$original_https_proxy"
+            restore_env_var ANTHROPIC_AUTH_TOKEN "$original_token"
+            restore_env_var ANTHROPIC_BASE_URL "$original_base_url" 
+            restore_env_var http_proxy "$original_http_proxy"
+            restore_env_var https_proxy "$original_https_proxy"
             return 0
         fi
     else
@@ -654,16 +950,16 @@ run_claude_with_profile() {
     echo_info "按 Ctrl+C 退出"
     
     # 设置退出时恢复环境的陷阱
-    trap 'echo_info "正在恢复环境..."; export ANTHROPIC_AUTH_TOKEN="$original_token"; export ANTHROPIC_BASE_URL="$original_base_url"; export http_proxy="$original_http_proxy"; export https_proxy="$original_https_proxy"; exit 0' INT TERM
+    trap 'echo_info "正在恢复环境..."; restore_env_var ANTHROPIC_AUTH_TOKEN "$original_token"; restore_env_var ANTHROPIC_BASE_URL "$original_base_url"; restore_env_var http_proxy "$original_http_proxy"; restore_env_var https_proxy "$original_https_proxy"; exit 0' INT TERM
     
     # 启动Claude
     claude
     
     # 恢复原始环境变量
-    export ANTHROPIC_AUTH_TOKEN="$original_token"
-    export ANTHROPIC_BASE_URL="$original_base_url" 
-    export http_proxy="$original_http_proxy"
-    export https_proxy="$original_https_proxy"
+    restore_env_var ANTHROPIC_AUTH_TOKEN "$original_token"
+    restore_env_var ANTHROPIC_BASE_URL "$original_base_url" 
+    restore_env_var http_proxy "$original_http_proxy"
+    restore_env_var https_proxy "$original_https_proxy"
 }
 
 # 显示主菜单
