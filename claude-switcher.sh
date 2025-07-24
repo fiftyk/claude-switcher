@@ -516,49 +516,12 @@ get_exit_ip() {
     return 0
 }
 
-# 列出配置文件
+# 新的主菜单 - 方案B分组设计
 list_profiles() {
-    # 检查是否有上次使用的配置
-    local last_used
-    last_used=$(get_active_profile)
     
-    if [ -n "$last_used" ] && [ -f "$PROFILES_DIR/$last_used.conf" ]; then
-        local display_name
-        display_name=$(grep "^NAME=" "$PROFILES_DIR/$last_used.conf" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "$last_used")
-        
-        echo_title "快速启动"
-        echo "  上次使用: \"$display_name\""
-        echo
-        echo "  1 继续使用\"$display_name\""
-        echo "  2 选择其他配置"
-        echo "  3 退出"
-        
-        echo -n -e "\n${YELLOW}请选择 [1-3] (默认: 1): ${NC}"
-        read -r quick_choice
-        
-        # 如果用户直接按回车，使用默认选项1
-        case "${quick_choice:-1}" in
-            1)
-                run_claude_with_profile "$last_used"
-                return
-                ;;
-            2)
-                # 继续显示完整配置列表
-                ;;
-            3)
-                echo_info "再见！"
-                exit 0
-                ;;
-            *)
-                echo_warning "无效选择，显示完整配置列表"
-                ;;
-        esac
-    fi
-    
-    echo_title "可用配置"
-    
+    # 获取所有配置
     local profiles=()
-    local count=1
+    local profile_names=()
     
     if [ -d "$PROFILES_DIR" ]; then
         for config_file in "$PROFILES_DIR"/*.conf; do
@@ -567,96 +530,229 @@ list_profiles() {
                 name=$(basename "$config_file" .conf)
                 profiles+=("$name")
                 
-                # 读取配置名称
-                local display_name=""
-                if [ -f "$config_file" ]; then
-                    display_name=$(grep "^NAME=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
-                fi
-                
-                # 如果没有NAME字段，使用文件名
-                if [ -z "$display_name" ]; then
-                    display_name="$name"
-                fi
-                
-                echo "  $count 使用\"$display_name\""
-                ((count++))
+                # 读取配置显示名称
+                local display_name
+                display_name=$(grep "^NAME=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "$name")
+                profile_names+=("$display_name")
             fi
         done
     fi
     
-    echo "  $count 创建新配置"
-    ((count++))
-    echo "  $count 退出"
+    # 检查是否有配置
+    if [ ${#profiles[@]} -eq 0 ]; then
+        echo_info "暂无配置，请先创建一个配置"
+        echo
+        echo -e "${YELLOW}⚙️  配置管理:${NC}"
+        echo "  1 创建新配置"
+        echo "  2 退出"
+        
+        echo -n -e "\n${YELLOW}请选择 [1-2]: ${NC}"
+        read -r choice
+        
+        case "$choice" in
+            1) create_new_profile ;;
+            2) echo_info "再见！"; exit 0 ;;
+            *) echo_error "无效选择"; exit 1 ;;
+        esac
+        return
+    fi
     
-    echo -n -e "\n${YELLOW}请选择配置 [1-$count]: ${NC}"
+    # 获取上次使用的配置
+    local last_used
+    last_used=$(get_active_profile)
+    
+    # 显示快速启动区域
+    echo -e "${YELLOW}🚀 快速启动:${NC}"
+    local quick_count=1
+    for i in "${!profiles[@]}"; do
+        local profile="${profiles[$i]}"
+        local display_name="${profile_names[$i]}"
+        
+        if [ "$profile" = "$last_used" ]; then
+            echo "  $quick_count $display_name (上次使用)"
+        else
+            echo "  $quick_count $display_name"
+        fi
+        ((quick_count++))
+    done
+    
+    echo
+    echo -e "${YELLOW}⚙️  配置管理:${NC}"
+    local mgmt_start=$quick_count
+    echo "  $quick_count 创建新配置"
+    ((quick_count++))
+    echo "  $quick_count 编辑配置"
+    ((quick_count++))
+    echo "  $quick_count 删除配置"
+    ((quick_count++))
+    
+    echo
+    echo -e "${YELLOW}📋 其他:${NC}"
+    echo "  $quick_count 配置详情"
+    ((quick_count++))
+    echo "  $quick_count 退出"
+    
+    local max_choice=$quick_count
+    
+    echo -n -e "\n${YELLOW}请选择 [1-$max_choice] (默认: 1): ${NC}"
     read -r choice
     
-    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le $count ]; then
-        if [ "$choice" -eq $count ]; then
-            # 退出
-            echo_info "再见！"
-            exit 0
-        elif [ "$choice" -eq $((count-1)) ]; then
-            # 创建新配置
-            create_new_profile
-        else
-            # 选择已有配置
-            local selected_profile="${profiles[$((choice-1))]}"
-            set_active_profile "$selected_profile"
-            handle_existing_profile "$selected_profile"
-        fi
-    else
-        echo_error "无效的选择"
+    # 使用默认值
+    choice=${choice:-1}
+    
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
+        echo_error "无效选择"
         exit 1
+    fi
+    
+    # 处理选择
+    if [ "$choice" -le ${#profiles[@]} ]; then
+        # 快速启动配置
+        local selected_profile="${profiles[$((choice-1))]}"
+        set_active_profile "$selected_profile"
+        echo_info "启动配置: ${profile_names[$((choice-1))]}"
+        run_claude_with_profile "$selected_profile"
+    elif [ "$choice" -eq $mgmt_start ]; then
+        # 创建新配置
+        create_new_profile
+    elif [ "$choice" -eq $((mgmt_start+1)) ]; then
+        # 编辑配置
+        show_config_management_menu "edit"
+    elif [ "$choice" -eq $((mgmt_start+2)) ]; then
+        # 删除配置
+        show_config_management_menu "delete"
+    elif [ "$choice" -eq $((mgmt_start+3)) ]; then
+        # 配置详情
+        show_config_details
+    else
+        # 退出
+        echo_info "再见！"
+        exit 0
     fi
 }
 
-# 处理已有配置
-handle_existing_profile() {
-    local profile_name="$1"
-    local config_file="$PROFILES_DIR/$profile_name.conf"
+# 配置管理菜单
+show_config_management_menu() {
+    local action="$1"  # edit 或 delete
     
-    echo_title "配置: $profile_name"
+    echo_title "配置管理 - ${action}"
+    echo
     
-    # 显示配置概要
-    show_profile_summary "$config_file"
+    # 获取所有配置
+    local profiles=()
+    local profile_names=()
     
-    echo -e "\n${YELLOW}选择操作:${NC}"
-    echo "  1 启动 Claude"
-    echo "  2 查看/编辑配置"
-    echo "  3 删除此配置"
-    echo "  4 返回主菜单"
-    echo "  5 退出"
+    if [ -d "$PROFILES_DIR" ]; then
+        for config_file in "$PROFILES_DIR"/*.conf; do
+            if [ -f "$config_file" ]; then
+                local name
+                name=$(basename "$config_file" .conf)
+                profiles+=("$name")
+                
+                local display_name
+                display_name=$(grep "^NAME=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "$name")
+                profile_names+=("$display_name")
+            fi
+        done
+    fi
     
-    echo -n -e "\n${YELLOW}请选择 [1-5] (默认: 1): ${NC}"
-    read -r action
+    if [ ${#profiles[@]} -eq 0 ]; then
+        echo_info "暂无配置可管理"
+        echo -n -e "${YELLOW}按回车返回主菜单: ${NC}"
+        read -r
+        show_main_menu
+        return
+    fi
     
-    case "${action:-1}" in
-        1)
-            run_claude_with_profile "$profile_name"
-            ;;
-        2)
-            edit_profile "$config_file"
-            # 编辑后返回主菜单
-            show_main_menu
-            ;;
-        3)
-            delete_profile "$profile_name"
-            ;;
-        4)
-            # 返回主菜单
-            show_main_menu
-            ;;
-        5)
-            echo_info "再见！"
-            exit 0
-            ;;
-        *)
-            echo_error "无效的选择"
-            exit 1
-            ;;
-    esac
+    echo "选择要${action}的配置:"
+    for i in "${!profiles[@]}"; do
+        echo "  $((i+1)) ${profile_names[$i]}"
+    done
+    echo "  ──────────────"
+    echo "  $((${#profiles[@]}+1)) 返回主菜单"
+    
+    echo -n -e "\n${YELLOW}请选择 [1-$((${#profiles[@]}+1))]: ${NC}"
+    read -r choice
+    
+    if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $((${#profiles[@]}+1)) ]; then
+        echo_error "无效选择"
+        show_main_menu
+        return
+    fi
+    
+    if [ "$choice" -eq $((${#profiles[@]}+1)) ]; then
+        show_main_menu
+        return
+    fi
+    
+    local selected_profile="${profiles[$((choice-1))]}"
+    
+    if [ "$action" = "edit" ]; then
+        edit_profile "$PROFILES_DIR/$selected_profile.conf"
+        echo_success "配置已更新"
+        show_main_menu
+    elif [ "$action" = "delete" ]; then
+        delete_profile "$selected_profile"
+        show_main_menu
+    fi
 }
+
+# 显示配置详情
+show_config_details() {
+    echo_title "配置详情"
+    echo
+    
+    if [ ! -d "$PROFILES_DIR" ] || [ -z "$(ls -A "$PROFILES_DIR"/*.conf 2>/dev/null)" ]; then
+        echo_info "暂无配置"
+        echo -n -e "${YELLOW}按回车返回主菜单: ${NC}"
+        read -r
+        show_main_menu
+        return
+    fi
+    
+    for config_file in "$PROFILES_DIR"/*.conf; do
+        if [ -f "$config_file" ]; then
+            local name
+            name=$(basename "$config_file" .conf)
+            
+            local display_name auth_token base_url proxy_url
+            display_name=$(grep "^NAME=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "$name")
+            auth_token=$(grep "^ANTHROPIC_AUTH_TOKEN=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+            base_url=$(grep "^ANTHROPIC_BASE_URL=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+            proxy_url=$(grep "^http_proxy=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+            
+            echo -e "${YELLOW}📋 $display_name${NC}"
+            
+            if [ -n "$base_url" ]; then
+                echo "  Base URL: $base_url"
+            else
+                echo "  Base URL: 默认 (api.anthropic.com)"
+            fi
+            
+            if [ -n "$auth_token" ]; then
+                local masked_token
+                masked_token=$(echo "$auth_token" | sed 's/\(.\{6\}\).*/\1***/')
+                echo "  Auth Token: $masked_token"
+            else
+                echo "  Auth Token: 未设置"
+            fi
+            
+            if [ -n "$proxy_url" ]; then
+                echo "  代理: $proxy_url"
+            else
+                echo "  代理: 未设置"
+            fi
+            
+            echo
+        fi
+    done
+    
+    echo -n -e "${YELLOW}按回车返回主菜单: ${NC}"
+    read -r
+    show_main_menu
+}
+
+# 注意：handle_existing_profile 函数已被新的菜单设计替代
 
 # 显示配置概要
 show_profile_summary() {
@@ -745,8 +841,7 @@ delete_profile() {
         echo_info "取消删除"
     fi
     
-    # 返回主菜单
-    show_main_menu
+    # 删除后会在调用处返回主菜单
 }
 
 # 创建新配置
@@ -852,34 +947,12 @@ EOF
     # 设置文件权限
     chmod 600 "$config_file"
     
-    echo_success "配置 '$profile_name' 创建成功"
+    echo_success "配置 '$profile_name' 创建成功！"
+    echo_info "自动返回主菜单..."
+    echo
     
-    # 询问是否立即使用
-    echo -e "\n${YELLOW}接下来要做什么？${NC}"
-    echo "  1 启动此配置"
-    echo "  2 返回主菜单"
-    echo "  3 退出"
-    
-    echo -n -e "\n${YELLOW}请选择 [1-3] (默认: 1): ${NC}"
-    read -r next_action
-    
-    case "${next_action:-1}" in
-        1)
-            set_active_profile "$profile_name"
-            run_claude_with_profile "$profile_name"
-            ;;
-        2)
-            show_main_menu
-            ;;
-        3)
-            echo_info "再见！"
-            exit 0
-            ;;
-        *)
-            echo_info "返回主菜单"
-            show_main_menu
-            ;;
-    esac
+    # 自动返回主菜单
+    show_main_menu
 }
 
 # 使用指定配置启动Claude
