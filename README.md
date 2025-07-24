@@ -5,12 +5,14 @@
 ## 🌟 特性
 
 - 🚀 **一键启动** - 运行 `claude-switcher` 即可开始使用
+- ⚡ **命令行参数** - 支持 `claude-switcher moonshot` 直接指定配置启动
 - 📋 **配置管理** - 创建和管理多个Claude配置
 - 🔄 **快速切换** - 自动记住上次使用的配置，按回车快速启动  
 - 🌍 **IP检查** - 启动前自动检查出口IP地址，检测失败或非美国IP时提示用户选择
 - 🔒 **安全存储** - 配置文件权限保护
 - 🎯 **默认选项** - 所有菜单支持默认选项，按回车选择最常用操作
 - 💡 **灵活配置** - 支持空Token配置，便于创建模板和测试
+- 🔧 **脚本友好** - 完全支持在自动化脚本中使用
 
 ## 📦 安装
 
@@ -31,13 +33,32 @@ sudo mv claude-switcher.sh /usr/local/bin/claude-switcher
 
 ## 🚀 使用方法
 
-### 启动程序
+### 基本用法
 ```bash
+# 交互式启动（原有方式）
 claude-switcher
+
+# 直接指定配置启动（新功能）
+claude-switcher moonshot
+claude-switcher --config work
+claude-switcher -c production
+
+# 查看所有可用配置
+claude-switcher --list
+
+# 显示帮助信息
+claude-switcher --help
 ```
 
 ### 操作流程
 
+#### 🚀 快速启动（命令行参数方式）
+```bash
+# 直接启动指定配置，无交互
+claude-switcher moonshot
+```
+
+#### 📋 交互式启动（无参数方式）
 1. **首次运行** - 会显示配置选择界面
 2. **快速启动** - 再次运行时显示上次使用的配置，按回车即可快速启动  
 3. **配置管理** - 选择已有配置后可以启动、编辑或删除，按回车默认启动
@@ -85,6 +106,57 @@ claude-switcher
   5 退出
 
 请选择 [1-5] (默认: 1):   # 直接按回车启动
+```
+
+## 🎯 新功能：命令行参数支持
+
+### 使用场景
+
+#### 🔥 脚本自动化
+```bash
+#!/bin/bash
+# 自动化脚本中直接指定配置
+claude-switcher production << EOF
+请帮我分析今天的日志文件
+EOF
+```
+
+#### ⚡ 快速切换
+```bash
+# 无需进入交互菜单，直接切换配置
+claude-switcher moonshot
+claude-switcher anyrouter
+claude-switcher local-proxy
+```
+
+#### 📋 配置管理
+```bash
+# 查看所有可用配置
+claude-switcher --list
+
+# 输出示例：
+# === 可用配置列表 ===
+#   moonshot - Moonshot配置
+#   work - 工作环境配置
+#   home - 家庭网络配置
+```
+
+### 支持的参数格式
+- `claude-switcher <配置名>` - 直接指定配置名称
+- `claude-switcher --config <配置名>` - 使用长参数格式
+- `claude-switcher -c <配置名>` - 使用短参数格式
+- `claude-switcher --list` - 列出所有配置
+- `claude-switcher --help` - 显示帮助信息
+
+### 错误处理
+当指定的配置不存在时，会自动显示可用配置列表：
+```bash
+$ claude-switcher nonexistent
+✗ 配置 'nonexistent' 不存在
+
+ℹ 可用配置:
+  moonshot - Moonshot配置
+  work - 工作环境配置
 ```
 
 ## 📝 配置文件格式

@@ -16,6 +16,141 @@ CONFIG_DIR="$HOME/.claude-switcher"
 PROFILES_DIR="$CONFIG_DIR/profiles"
 ACTIVE_FILE="$CONFIG_DIR/active"
 
+# 命令行参数处理
+parse_arguments() {
+    local config_name=""
+    
+    case "$#" in
+        0)
+            # 无参数，使用交互式模式
+            return 0
+            ;;
+        1)
+            case "$1" in
+                --help|-h)
+                    show_help_info
+                    exit 0
+                    ;;
+                --list|-l)
+                    list_available_configs
+                    exit 0
+                    ;;
+                --config)
+                    echo_error "缺少配置名称"
+                    echo_info "用法: claude-switcher --config <配置名称>"
+                    exit 1
+                    ;;
+                -*)
+                    echo_error "未知参数: $1"
+                    show_help_info
+                    exit 1
+                    ;;
+                *)
+                    # 直接指定配置名称
+                    config_name="$1"
+                    ;;
+            esac
+            ;;
+        2)
+            case "$1" in
+                --config|-c)
+                    config_name="$2"
+                    ;;
+                *)
+                    echo_error "未知参数组合: $1 $2"
+                    show_help_info
+                    exit 1
+                    ;;
+            esac
+            ;;
+        *)
+            echo_error "参数过多"
+            show_help_info
+            exit 1
+            ;;
+    esac
+    
+    if [ -n "$config_name" ]; then
+        run_with_specified_config "$config_name"
+        exit 0
+    fi
+}
+
+# 显示帮助信息
+show_help_info() {
+    echo_title "Claude Switcher - 使用帮助"
+    echo
+    echo -e "${YELLOW}用法:${NC}"
+    echo "  claude-switcher                    启动交互式配置选择"
+    echo "  claude-switcher <配置名称>         直接使用指定配置启动"
+    echo "  claude-switcher --config <名称>    使用指定配置启动"
+    echo "  claude-switcher --list             列出所有可用配置"
+    echo "  claude-switcher --help             显示此帮助信息"
+    echo
+    echo -e "${YELLOW}示例:${NC}"
+    echo "  claude-switcher moonshot           # 直接启动moonshot配置"
+    echo "  claude-switcher --config work      # 启动work配置"
+    echo "  claude-switcher --list             # 查看所有配置"
+    echo
+    echo -e "${YELLOW}说明:${NC}"
+    echo "  • 配置文件位于: ~/.claude-switcher/profiles/"
+    echo "  • 无参数运行时进入交互式菜单"
+    echo "  • 指定不存在的配置会显示可用配置列表"
+}
+
+# 列出可用配置
+list_available_configs() {
+    echo_title "可用配置列表"
+    
+    local found_any=false
+    
+    if [ -d "$PROFILES_DIR" ]; then
+        for config_file in "$PROFILES_DIR"/*.conf; do
+            if [ -f "$config_file" ]; then
+                found_any=true
+                local name
+                name=$(basename "$config_file" .conf)
+                
+                # 读取配置显示名称
+                local display_name=""
+                if [ -f "$config_file" ]; then
+                    display_name=$(grep "^NAME=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+                fi
+                
+                # 如果没有NAME字段，使用文件名
+                if [ -z "$display_name" ]; then
+                    display_name="$name"
+                fi
+                
+                echo "  $name - $display_name"
+            fi
+        done
+    fi
+    
+    if [ "$found_any" = false ]; then
+        echo_info "暂无可用配置，请先运行 'claude-switcher' 创建配置"
+    fi
+}
+
+# 使用指定配置运行
+run_with_specified_config() {
+    local config_name="$1"
+    local config_file="$PROFILES_DIR/$config_name.conf"
+    
+    if [ ! -f "$config_file" ]; then
+        echo_error "配置 '$config_name' 不存在"
+        echo
+        echo_info "可用配置:"
+        list_available_configs
+        exit 1
+    fi
+    
+    # 设置为活动配置并启动
+    set_active_profile "$config_name"
+    echo_info "使用配置: $config_name"
+    run_claude_with_profile "$config_name"
+}
+
 # 颜色输出函数
 echo_error() {
     echo -e "${RED}✗ $1${NC}" >&2
@@ -541,6 +676,9 @@ main() {
     
     # 初始化配置目录
     init_config_dir
+    
+    # 解析命令行参数
+    parse_arguments "$@"
     
     # 显示主菜单
     show_main_menu
