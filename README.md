@@ -288,7 +288,7 @@ claude-switcher  # 选择"创建新配置"
 ### Claude CLI 未安装
 ```bash
 # 安装Claude CLI
-# 访问: https://github.com/anthropics/claude-cli
+# 访问: https://github.com/anthropics/claude-code
 ```
 
 ### IP检测问题
