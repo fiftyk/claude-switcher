@@ -347,6 +347,9 @@ rename_config() {
         return 1
     fi
     
+    # 确保目标目录存在
+    mkdir -p "$PROFILES_DIR"
+    
     # 复制文件并更新NAME字段
     cp "$old_file" "$new_file"
     if grep -q "^NAME=" "$new_file"; then
@@ -391,6 +394,9 @@ copy_config() {
         echo_error "目标配置已存在: $target_name"
         return 1
     fi
+    
+    # 确保目标目录存在
+    mkdir -p "$PROFILES_DIR"
     
     # 复制文件并更新NAME字段
     cp "$source_file" "$target_file"
@@ -801,7 +807,9 @@ edit_profile() {
     echo_info "使用 vi 编辑配置文件..."
     
     # 备份原文件
-    cp "$config_file" "${config_file}.backup"
+    if [ -f "$config_file" ]; then
+        cp "$config_file" "${config_file}.backup"
+    fi
     
     # 使用vi编辑
     vi "$config_file"
@@ -1015,7 +1023,7 @@ run_claude_with_profile() {
     # 检查Claude CLI是否安装
     if ! command -v claude &> /dev/null; then
         echo_error "Claude CLI 未安装"
-        echo_info "请访问 https://github.com/anthropics/claude-cli 安装"
+        echo_info "请访问 https://github.com/anthropics/claude-code 安装"
         return 1
     fi
     
