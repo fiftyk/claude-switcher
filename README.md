@@ -201,7 +201,7 @@ $ claude-switcher nonexistent
 
 ## 📝 配置文件格式
 
-配置文件使用简单的 Shell 变量格式：
+配置文件使用简单的 Shell 变量格式，支持任意环境变量：
 
 ```bash
 # Claude Switcher 配置文件
@@ -210,7 +210,14 @@ ANTHROPIC_AUTH_TOKEN="sk-ant-xxxx"
 ANTHROPIC_BASE_URL="https://anyrouter.top"
 http_proxy="http://127.0.0.1:7890"
 https_proxy="http://127.0.0.1:7890"
+
+# 支持任意环境变量，例如：
+ANTHROPIC_MODEL="claude-3-5-sonnet-20240620"
+ANTHROPIC_SMALL_FAST_MODEL="claude-3-haiku-20240307"
+CUSTOM_VAR="custom-value"
 ```
+
+程序会自动读取配置文件中的所有环境变量并导出到运行环境中，退出时会自动恢复原始环境变量。
 
 ## 🔧 创建配置流程
 

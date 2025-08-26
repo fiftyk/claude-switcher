@@ -96,6 +96,56 @@ restore_env_var() {
     fi
 }
 
+# 恢复所有环境变量
+restore_all_env_vars() {
+    local -n env_array=$1
+    
+    # 遍历所有保存的环境变量并恢复
+    for var_name in "${!env_array[@]}"; do
+        local original_value="${env_array[$var_name]}"
+        
+        if [ -z "$original_value" ]; then
+            unset "$var_name"
+        else
+            export "$var_name"="$original_value"
+        fi
+    done
+}
+
+# 从文件恢复所有环境变量
+restore_all_env_vars_from_file() {
+    local restore_file="$1"
+    
+    # 检查文件是否存在
+    if [ ! -f "$restore_file" ]; then
+        return
+    fi
+    
+    # 读取文件并恢复环境变量
+    while IFS= read -r line; do
+        # 跳过空行
+        if [ -z "$line" ]; then
+            continue
+        fi
+        
+        # 解析变量名和值
+        local var_name="${line%%=*}"
+        local var_value="${line#*=}"
+        
+        # 如果值为空且变量名等于整行，说明原值为空
+        if [ "$var_name" = "$line" ]; then
+            var_value=""
+        fi
+        
+        # 恢复环境变量
+        if [ -z "$var_value" ]; then
+            unset "$var_name"
+        else
+            export "$var_name"="$var_value"
+        fi
+    done < "$restore_file"
+}
+
 # 命令行参数处理
 parse_arguments() {
     local config_name=""
@@ -949,7 +999,9 @@ EOF
     
     cat >> "$config_file" << EOF
 
-# 其他环境变量可以在此添加
+# 其他环境变量可以在此添加，例如：
+# ANTHROPIC_MODEL="claude-3-5-sonnet-20240620"
+# ANTHROPIC_SMALL_FAST_MODEL="claude-3-haiku-20240307"
 EOF
     
     # 设置文件权限
@@ -981,37 +1033,51 @@ run_claude_with_profile() {
     local original_http_proxy="$http_proxy"
     local original_https_proxy="$https_proxy"
     
-    # 安全加载配置
-    local auth_token base_url proxy_url
-    auth_token=$(grep "^ANTHROPIC_AUTH_TOKEN=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"')
-    base_url=$(grep "^ANTHROPIC_BASE_URL=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"')
-    proxy_url=$(grep "^http_proxy=" "$config_file" 2>/dev/null | cut -d'=' -f2- | tr -d '"')
+    # 创建临时文件来存储需要恢复的环境变量
+    local temp_restore_file=$(mktemp)
     
-    # 设置变量
-    ANTHROPIC_AUTH_TOKEN="$auth_token"
-    ANTHROPIC_BASE_URL="$base_url"
-    http_proxy="$proxy_url"
-    https_proxy="$proxy_url"
+    # 安全加载配置 - 读取所有非注释行的变量
+    while IFS= read -r line; do
+        # 跳过空行和注释行
+        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        
+        # 解析变量名和值
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            local var_name="${BASH_REMATCH[1]}"
+            local var_value="${BASH_REMATCH[2]}"
+            
+            # 移除可能的引号
+            var_value="${var_value#\"}"
+            var_value="${var_value%\"}"
+            var_value="${var_value#\'}"
+            var_value="${var_value%\'}"
+            
+            # 保存原始环境变量值到临时文件
+            if [[ ${!var_name+x} ]]; then
+                echo "$var_name=${!var_name}" >> "$temp_restore_file"
+            else
+                echo "$var_name=" >> "$temp_restore_file"
+            fi
+            
+            # 设置新值
+            export "$var_name"="$var_value"
+        fi
+    done < "$config_file"
     
-    # 导出环境变量
-    export ANTHROPIC_AUTH_TOKEN
-    if [ -n "$ANTHROPIC_BASE_URL" ]; then
-        export ANTHROPIC_BASE_URL
-    fi
-    if [ -n "$http_proxy" ]; then
-        export http_proxy
-        export https_proxy
-    fi
+    # 特殊处理一些已知变量（保持向后兼容性）
+    local auth_token="$ANTHROPIC_AUTH_TOKEN"
+    local base_url="$ANTHROPIC_BASE_URL"
+    local proxy_url="$http_proxy"
     
     # 检查出口IP（仅在使用默认API地址时）
     if [ -z "$base_url" ]; then
         echo_info "使用默认API地址，检查网络连通性..."
         if ! get_exit_ip; then
-            # 恢复原始环境变量
-            restore_env_var ANTHROPIC_AUTH_TOKEN "$original_token"
-            restore_env_var ANTHROPIC_BASE_URL "$original_base_url" 
-            restore_env_var http_proxy "$original_http_proxy"
-            restore_env_var https_proxy "$original_https_proxy"
+            # 恢复所有环境变量
+            restore_all_env_vars_from_file "$temp_restore_file"
+            rm -f "$temp_restore_file"
             return 0
         fi
     else
@@ -1024,6 +1090,9 @@ run_claude_with_profile() {
     if ! command -v claude &> /dev/null; then
         echo_error "Claude CLI 未安装"
         echo_info "请访问 https://github.com/anthropics/claude-code 安装"
+        # 恢复所有环境变量
+        restore_all_env_vars_from_file "$temp_restore_file"
+        rm -f "$temp_restore_file"
         return 1
     fi
     
@@ -1031,16 +1100,14 @@ run_claude_with_profile() {
     echo_info "按 Ctrl+C 退出"
     
     # 设置退出时恢复环境的陷阱
-    trap 'echo_info "正在恢复环境..."; restore_env_var ANTHROPIC_AUTH_TOKEN "$original_token"; restore_env_var ANTHROPIC_BASE_URL "$original_base_url"; restore_env_var http_proxy "$original_http_proxy"; restore_env_var https_proxy "$original_https_proxy"; exit 0' INT TERM
+    trap 'echo_info "正在恢复环境..."; restore_all_env_vars_from_file "'"$temp_restore_file"'"; rm -f "'"$temp_restore_file"'"; exit 0' INT TERM
     
     # 启动Claude
     claude
     
-    # 恢复原始环境变量
-    restore_env_var ANTHROPIC_AUTH_TOKEN "$original_token"
-    restore_env_var ANTHROPIC_BASE_URL "$original_base_url" 
-    restore_env_var http_proxy "$original_http_proxy"
-    restore_env_var https_proxy "$original_https_proxy"
+    # 恢复所有环境变量
+    restore_all_env_vars_from_file "$temp_restore_file"
+    rm -f "$temp_restore_file"
 }
 
 # 显示主菜单
