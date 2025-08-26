@@ -617,9 +617,21 @@ list_profiles() {
     local last_used
     last_used=$(get_active_profile)
     
+    # 查找上次使用的配置在列表中的位置
+    local default_choice=1
+    local quick_count=1
+    for i in "${!profiles[@]}"; do
+        local profile="${profiles[$i]}"
+        if [ "$profile" = "$last_used" ]; then
+            default_choice=$quick_count
+            break
+        fi
+        ((quick_count++))
+    done
+    
     # 显示快速启动区域
     echo -e "${YELLOW}🚀 快速启动:${NC}"
-    local quick_count=1
+    quick_count=1
     for i in "${!profiles[@]}"; do
         local profile="${profiles[$i]}"
         local display_name="${profile_names[$i]}"
@@ -650,11 +662,11 @@ list_profiles() {
     
     local max_choice=$quick_count
     
-    echo -n -e "\n${YELLOW}请选择 [1-$max_choice] (默认: 1): ${NC}"
+    echo -n -e "\n${YELLOW}请选择 [1-$max_choice] (默认: $default_choice): ${NC}"
     read -r choice
     
     # 使用默认值
-    choice=${choice:-1}
+    choice=${choice:-$default_choice}
     
     if [[ ! "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt $max_choice ]; then
         echo_error "无效选择"
