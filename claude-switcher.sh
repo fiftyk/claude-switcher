@@ -150,6 +150,42 @@ restore_all_env_vars_from_file() {
 parse_arguments() {
     local config_name=""
     
+    # 先检查是否包含参数透传分隔符 --
+    local passthrough=false
+    local -a pass_args=()
+    local -a left_args=()
+    for arg in "$@"; do
+        if [ "$passthrough" = true ]; then
+            pass_args+=("$arg")
+        elif [ "$arg" = "--" ]; then
+            passthrough=true
+        else
+            left_args+=("$arg")
+        fi
+    done
+    
+    if [ "$passthrough" = true ]; then
+        # 支持三种形式：
+        # 1) <name> -- [args...]
+        # 2) --config|-c <name> -- [args...]
+        # 3) -- [args...] → 进入选择菜单，选中后透传
+        if [ ${#left_args[@]} -eq 0 ]; then
+            list_profiles "${pass_args[@]}"
+            exit 0
+        elif [ ${#left_args[@]} -eq 1 ] && [[ ! "${left_args[0]}" =~ ^- ]]; then
+            config_name="${left_args[0]}"
+        elif [ ${#left_args[@]} -eq 2 ] && { [ "${left_args[0]}" = "--config" ] || [ "${left_args[0]}" = "-c" ]; }; then
+            config_name="${left_args[1]}"
+        else
+            echo_error "透传用法错误"
+            show_help_info
+            exit 1
+        fi
+
+        run_with_specified_config "$config_name" "${pass_args[@]}"
+        exit 0
+    fi
+    
     case "$#" in
         0)
             # 无参数，使用交互式模式
@@ -248,8 +284,8 @@ show_help_info() {
     echo
     echo -e "${YELLOW}用法:${NC}"
     echo "  claude-switcher                    启动交互式配置选择"
-    echo "  claude-switcher <配置名称>         直接使用指定配置启动"
-    echo "  claude-switcher --config <名称>    使用指定配置启动"
+    echo "  claude-switcher <配置名称> [-- <参数...>]  使用指定配置启动，可透传参数"
+    echo "  claude-switcher --config <名称> [-- <参数...>] 使用指定配置启动，可透传参数"
     echo "  claude-switcher --list             列出所有可用配置"
     echo "  claude-switcher --test <名称>      测试配置有效性"
     echo "  claude-switcher --rename <旧> <新> 重命名配置"
@@ -257,8 +293,10 @@ show_help_info() {
     echo "  claude-switcher --help             显示此帮助信息"
     echo
     echo -e "${YELLOW}示例:${NC}"
-    echo "  claude-switcher moonshot           # 直接启动moonshot配置"
-    echo "  claude-switcher --config work      # 启动work配置"
+    echo "  claude-switcher moonshot                     # 直接启动moonshot配置"
+    echo "  claude-switcher moonshot -- --help           # 透传 --help 给 claude"
+    echo "  claude-switcher --config work -- -v          # 透传 -v 给 claude"
+    echo "  claude-switcher -- --version                 # 进入选择菜单，选中后透传 --version"
     echo "  claude-switcher --list             # 查看所有配置"
     echo "  claude-switcher --test moonshot    # 测试配置是否有效"
     echo "  claude-switcher --rename old new   # 重命名配置"
@@ -268,6 +306,7 @@ show_help_info() {
     echo "  • 配置文件位于: ~/.claude-switcher/profiles/"
     echo "  • 无参数运行时进入交互式菜单"
     echo "  • 指定不存在的配置会显示可用配置列表"
+    echo "  • 使用 -- 分隔后面的参数将原样传给 claude CLI"
 }
 
 # 列出可用配置
@@ -307,7 +346,9 @@ list_available_configs() {
 # 使用指定配置运行
 run_with_specified_config() {
     local config_name="$1"
-    
+    shift || true
+    local -a forward_args=("$@")
+
     # 验证配置名称安全性
     if ! validate_config_name "$config_name"; then
         echo_error "配置名称格式不正确"
@@ -327,7 +368,7 @@ run_with_specified_config() {
     # 设置为活动配置并启动
     set_active_profile "$config_name"
     echo_info "使用配置: $config_name"
-    run_claude_with_profile "$config_name"
+    run_claude_with_profile "$config_name" "${forward_args[@]}"
 }
 
 # 测试配置有效性
@@ -574,6 +615,8 @@ get_exit_ip() {
 
 # 新的主菜单 - 方案B分组设计
 list_profiles() {
+    # 可选的透传参数
+    local -a forward_args=("$@")
     
     # 获取所有配置
     local profiles=()
@@ -679,7 +722,11 @@ list_profiles() {
         local selected_profile="${profiles[$((choice-1))]}"
         set_active_profile "$selected_profile"
         echo_info "启动配置: ${profile_names[$((choice-1))]}"
-        run_claude_with_profile "$selected_profile"
+        if [ ${#forward_args[@]} -gt 0 ]; then
+            run_claude_with_profile "$selected_profile" "${forward_args[@]}"
+        else
+            run_claude_with_profile "$selected_profile"
+        fi
     elif [ "$choice" -eq $mgmt_start ]; then
         # 创建新配置
         create_new_profile
@@ -1030,6 +1077,8 @@ EOF
 # 使用指定配置启动Claude
 run_claude_with_profile() {
     local profile_name="$1"
+    shift || true
+    local -a forward_args=("$@")
     local config_file="$PROFILES_DIR/$profile_name.conf"
     
     if [ ! -f "$config_file" ]; then
@@ -1115,7 +1164,11 @@ run_claude_with_profile() {
     trap 'echo_info "正在恢复环境..."; restore_all_env_vars_from_file "'"$temp_restore_file"'"; rm -f "'"$temp_restore_file"'"; exit 0' INT TERM
     
     # 启动Claude
-    claude
+    if [ ${#forward_args[@]} -gt 0 ]; then
+        claude "${forward_args[@]}"
+    else
+        claude
+    fi
     
     # 恢复所有环境变量
     restore_all_env_vars_from_file "$temp_restore_file"
