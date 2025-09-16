@@ -15,6 +15,7 @@
 - 🎯 **默认选项** - 所有菜单支持默认选项，按回车选择最常用操作
 - 💡 **灵活配置** - 支持空Token配置，便于创建模板和测试
 - 🔧 **脚本友好** - 完全支持在自动化脚本中使用
+- 🔗 **参数透传** - 支持将参数直接传递给 Claude CLI，便于高级用法
 
 ## 📦 安装
 
@@ -44,6 +45,11 @@ claude-switcher
 claude-switcher moonshot
 claude-switcher --config work
 claude-switcher -c production
+
+# 参数透传功能
+claude-switcher moonshot -- --help          # 透传 --help 给 claude
+claude-switcher work -- --version           # 透传 --version 给 claude
+claude-switcher -- --model sonnet           # 选择配置后透传 --model 参数
 
 # 配置管理
 claude-switcher --list                    # 查看所有可用配置
@@ -122,6 +128,11 @@ claude-switcher moonshot
 claude-switcher production << EOF
 请帮我分析今天的日志文件
 EOF
+
+# 在脚本中使用参数透传
+claude-switcher work -- --model claude-3-haiku-20240307 << EOF
+快速回答这个问题：什么是 Claude？
+EOF
 ```
 
 #### ⚡ 快速切换
@@ -153,6 +164,28 @@ claude-switcher --list
 - `claude-switcher --rename <旧名称> <新名称>` - 重命名配置
 - `claude-switcher --copy <源名称> <目标名称>` - 复制配置
 - `claude-switcher --help` - 显示帮助信息
+
+### 🔗 参数透传功能
+支持通过 `--` 分隔符将参数直接传递给 Claude CLI：
+
+- `claude-switcher <配置名> -- [参数...]` - 使用指定配置并透传参数
+- `claude-switcher --config <配置名> -- [参数...]` - 长参数格式透传
+- `claude-switcher -- [参数...]` - 进入选择菜单，选中后透传参数
+
+#### 使用示例
+```bash
+# 直接透传帮助参数
+claude-switcher moonshot -- --help
+
+# 透传模型参数
+claude-switcher work -- --model claude-3-5-sonnet-20240620
+
+# 透传多个参数
+claude-switcher anyrouter -- --temperature 0.7 --max-tokens 1000
+
+# 进入选择菜单后透传参数
+claude-switcher -- --version
+```
 
 ### 配置管理功能
 
