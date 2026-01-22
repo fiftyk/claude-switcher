@@ -58,6 +58,6 @@ jobs:
 
       - name: Run Go Releaser
         run: |
-          goreleaser release --clean --skip-validate
+          goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
