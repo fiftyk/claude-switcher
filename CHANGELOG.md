@@ -2,6 +2,32 @@
 
 本文档记录了 Claude Switcher 的所有重要更改。
 
+## [v2.0.0] - 2025-01-22
+
+> **重大更新**: 重构为 Go 项目，消除外部依赖，提供更可靠的 JSON 处理。
+
+### ✨ 新功能
+- **配置同步到 settings.json** (新增 `--sync` 参数)
+  - 使用 `claude-switcher <配置名> --sync` 切换并同步配置
+  - 自动将环境变量写入 `~/.claude/settings.json`
+  - 保留 settings.json 中的其他配置（如 enabledPlugins）
+  - 添加 `_claudeSwitcherProfile` 标记当前配置
+
+### 🔄 重构
+- **Go 重构**
+  - 使用 Go 1.23 重构，消除了对 jq 的依赖
+  - 原生 JSON 支持，更可靠的 settings.json 处理
+  - TDD 开发模式，所有核心功能有单元测试覆盖
+  - 预编译二进制，跨平台兼容
+
+### 📦 工程化
+- **CI/CD**
+  - GitHub Actions 自动构建和发布
+  - 支持 macOS (Intel/Apple Silicon) 和 Linux
+  - 一键安装脚本自动下载预编译二进制
+
+---
+
 ## [未发布]
 
 ### 🎨 用户界面优化
