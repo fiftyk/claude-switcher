@@ -153,7 +153,7 @@ func indexOf(args []string, target string) int {
 }
 
 func showHelp() {
-	fmt.Println(`Claude Switcher - 使用帮助
+	fmt.Print(`Claude Switcher - 使用帮助
 
 用法:
   claude-switcher                    启动交互式配置选择
