@@ -1,0 +1,74 @@
+# Go Releaser 配置文件
+# 文档: https://goreleaser.com/
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: claude-switcher
+    main: .
+    binary: claude-switcher
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+      - -s
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - id: default
+    name_template: '{{ .Binary }}-{{ .Os }}-{{ .Arch }}'
+    format: zip
+
+checksum:
+  id: default
+  name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
+  algorithm: sha256
+
+release:
+  draft: true
+  name_template: '{{ .Tag }}'
+  header: |
+    ## 安装
+
+    ### 一键安装
+    ```bash
+    curl -fsSL https://raw.githubusercontent.com/fiftyk/claude-switcher/main/install.sh | bash
+    ```
+
+    ### 手动安装
+    ```bash
+    # macOS (Apple Silicon)
+    curl -fsSL https://github.com/fiftyk/claude-switcher/releases/download/{{ .Tag }}/claude-switcher-darwin-arm64 -o /usr/local/bin/claude-switcher
+    chmod +x /usr/local/bin/claude-switcher
+    ```
+
+    ## 使用方法
+
+    ```bash
+    claude-switcher --help
+    claude-switcher work --sync  # 同步配置到 settings.json
+    ```
+
+changelog:
+  id: default
+  from-latest: true
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^style:'
+      - '^skip-changelog'
+
+announce:
+  twitter:
+    enabled: false
+  mastodon:
+    enabled: false

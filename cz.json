@@ -1,0 +1,27 @@
+{
+  "name": "Claude Switcher",
+  "version": "2.0.0",
+  "description": "简单易用的 Claude 配置管理工具",
+  "changelogFilename": "CHANGELOG.md",
+  "useTypeScript": false,
+  "tagFormat": "v$version",
+  "rules": {
+    "messages": {
+      "skip": [],
+      "maxSubjectLength": 100,
+      "minSubjectLength": 5,
+      "maxBodyLength": 10000,
+      "minBodyLength": 5
+    },
+    "types": [
+      {"value": "feat", "name": "✨ 新功能:     新增功能"},
+      {"value": "fix", "name": "🐛 Bug 修复:   修复 Bug"},
+      {"value": "refactor", "name": "🔄 重构:      代码重构"},
+      {"value": "docs", "name": "📚 文档:      仅文档更改"},
+      {"value": "style", "name": "💄 格式:      代码格式（不影响功能）"},
+      {"value": "test", "name": "🧪 测试:      添加/修改测试"},
+      {"value": "chore", "name": "🔧 构建:      构建过程或辅助工具更改"}
+    ],
+    "scopes": []
+  }
+}

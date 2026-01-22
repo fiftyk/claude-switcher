@@ -13,6 +13,16 @@ import (
 	"github.com/fiftyk/claude-switcher/internal/settings"
 )
 
+// 版本信息 (由 Go Releaser 注入)
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
+// 版本信息
+const appName = "Claude Switcher"
+
 // GetSettingsFilePath 返回 settings.json 的路径
 func GetSettingsFilePath() string {
 	home, _ := os.UserHomeDir()
@@ -28,7 +38,14 @@ func main() {
 	renameFlag := flag.String("rename", "", "重命名配置")
 	copyFlag := flag.String("copy", "", "复制配置")
 	helpFlag := flag.Bool("help", false, "显示帮助")
+	versionFlag := flag.Bool("version", false, "显示版本信息")
 	flag.Parse()
+
+	// 显示版本
+	if *versionFlag {
+		showVersion()
+		return
+	}
 
 	// 显示帮助
 	if *helpFlag || len(os.Args) == 1 {
@@ -153,7 +170,7 @@ func indexOf(args []string, target string) int {
 }
 
 func showHelp() {
-	fmt.Print(`Claude Switcher - 使用帮助
+	fmt.Printf(`%s v%s - 使用帮助
 
 用法:
   claude-switcher                    启动交互式配置选择
@@ -164,13 +181,19 @@ func showHelp() {
   claude-switcher --test <名称>      测试配置有效性
   claude-switcher --rename <旧> <新> 重命名配置
   claude-switcher --copy <源> <目标>  复制配置
+  claude-switcher --version          显示版本信息
   claude-switcher --help             显示此帮助信息
 
 说明:
   • 配置文件位于: ~/.claude-switcher/profiles/
   • 无参数运行时进入交互式菜单
   • 使用 --sync 参数可将配置同步到 ~/.claude/settings.json
-`)
+
+`, appName, version)
+}
+
+func showVersion() {
+	fmt.Printf("%s version %s (commit: %s, date: %s)\n", appName, version, commit, date)
 }
 
 func listProfiles(profilesDir string) {
