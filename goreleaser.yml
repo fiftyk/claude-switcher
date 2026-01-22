@@ -31,7 +31,7 @@ checksum:
   algorithm: sha256
 
 release:
-  draft: true
+  draft: false
   name_template: '{{ .Tag }}'
   header: |
     ## 安装
