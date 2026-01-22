@@ -24,12 +24,10 @@ builds:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
 
 archives:
-  - id: default
-    name_template: '{{ .Binary }}-{{ .Os }}-{{ .Arch }}'
+  - name_template: '{{ .Binary }}-{{ .Os }}-{{ .Arch }}'
     format: zip
 
 checksum:
-  id: default
   name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
   algorithm: sha256
 
@@ -59,8 +57,7 @@ release:
     ```
 
 changelog:
-  id: default
-  from-latest: true
+  use: github
   filters:
     exclude:
       - '^docs:'
