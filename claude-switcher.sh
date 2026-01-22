@@ -11,10 +11,11 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# 配置目录
+# 配置文件目录
 CONFIG_DIR="$HOME/.claude-switcher"
 PROFILES_DIR="$CONFIG_DIR/profiles"
 ACTIVE_FILE="$CONFIG_DIR/active"
+SETTINGS_FILE="$HOME/.claude/settings.json"
 
 # 安全验证函数
 validate_config_name() {
@@ -149,7 +150,9 @@ restore_all_env_vars_from_file() {
 # 命令行参数处理
 parse_arguments() {
     local config_name=""
-    
+    local sync_settings=false
+    local -a forward_args=()
+
     # 先检查是否包含参数透传分隔符 --
     local passthrough=false
     local -a pass_args=()
@@ -159,11 +162,13 @@ parse_arguments() {
             pass_args+=("$arg")
         elif [ "$arg" = "--" ]; then
             passthrough=true
+        elif [ "$arg" = "--sync" ]; then
+            sync_settings=true
         else
             left_args+=("$arg")
         fi
     done
-    
+
     if [ "$passthrough" = true ]; then
         # 支持三种形式：
         # 1) <name> -- [args...]
@@ -182,10 +187,52 @@ parse_arguments() {
             exit 1
         fi
 
-        run_with_specified_config "$config_name" "${pass_args[@]}"
+        run_with_specified_config "$config_name" "$sync_settings" "${pass_args[@]}"
         exit 0
     fi
-    
+
+    # 如果启用了 sync_settings，处理 --sync 情况
+    if [ "$sync_settings" = true ]; then
+        local arr_len=${#left_args[@]}
+        if [ "$arr_len" -eq 1 ]; then
+            # 只有配置名，没有其他参数
+            config_name="${left_args[0]}"
+            run_with_specified_config "$config_name" "$sync_settings"
+            exit 0
+        elif [ "$arr_len" -eq 2 ]; then
+            # 检查是否是 --config 形式
+            if [ "${left_args[0]}" = "--config" ] || [ "${left_args[0]}" = "-c" ]; then
+                config_name="${left_args[1]}"
+                run_with_specified_config "$config_name" "$sync_settings"
+                exit 0
+            fi
+        fi
+        # arr_len > 2 或其他情况，继续下面的处理
+    fi
+
+    # 处理没有 -- 分隔符且没有 --sync 的情况
+    # 检测是否需要参数透传：最后一个参数以 - 开头且不是已知选项
+    local need_passthrough=false
+    local last_arg=""
+    local arr_len=${#left_args[@]}
+    if [ "$arr_len" -ge 2 ]; then
+        last_arg="${left_args[$((arr_len - 1))]}"
+        if [[ "$last_arg" =~ ^- && "$last_arg" != "--config" && "$last_arg" != "-c" ]]; then
+            need_passthrough=true
+        fi
+    fi
+
+    if [ "$need_passthrough" = true ]; then
+        # 最后一个参数是透传参数，倒数第二个是配置名
+        config_name="${left_args[0]}"
+        # 收集除第一个外的所有参数作为透传参数
+        for ((i=1; i<arr_len; i++)); do
+            forward_args+=("${left_args[$i]}")
+        done
+        run_with_specified_config "$config_name" "$sync_settings" "${forward_args[@]}"
+        exit 0
+    fi
+
     case "$#" in
         0)
             # 无参数，使用交互式模式
@@ -241,10 +288,19 @@ parse_arguments() {
                     test_config "$2"
                     exit $?
                     ;;
-                *)
-                    echo_error "未知参数组合: $1 $2"
+                --sync)
+                    echo_error "缺少配置名称"
+                    echo_info "用法: claude-switcher <配置名称> --sync"
+                    exit 1
+                    ;;
+                -*)
+                    echo_error "未知参数: $1"
                     show_help_info
                     exit 1
+                    ;;
+                *)
+                    # 直接指定配置名称
+                    config_name="$1"
                     ;;
             esac
             ;;
@@ -257,6 +313,16 @@ parse_arguments() {
                 --copy)
                     copy_config "$2" "$3"
                     exit $?
+                    ;;
+                --config|-c)
+                    if [ "$3" = "--sync" ]; then
+                        config_name="$2"
+                        final_sync=true
+                    else
+                        echo_error "未知参数组合: $1 $2 $3"
+                        show_help_info
+                        exit 1
+                    fi
                     ;;
                 *)
                     echo_error "未知参数组合: $1 $2 $3"
@@ -273,7 +339,7 @@ parse_arguments() {
     esac
     
     if [ -n "$config_name" ]; then
-        run_with_specified_config "$config_name"
+        run_with_specified_config "$config_name" "$final_sync"
         exit 0
     fi
 }
@@ -285,6 +351,7 @@ show_help_info() {
     echo -e "${YELLOW}用法:${NC}"
     echo "  claude-switcher                    启动交互式配置选择"
     echo "  claude-switcher <配置名称> [-- <参数...>]  使用指定配置启动，可透传参数"
+    echo "  claude-switcher <配置名称> --sync         切换配置并同步到 settings.json"
     echo "  claude-switcher --config <名称> [-- <参数...>] 使用指定配置启动，可透传参数"
     echo "  claude-switcher --list             列出所有可用配置"
     echo "  claude-switcher --test <名称>      测试配置有效性"
@@ -295,6 +362,7 @@ show_help_info() {
     echo -e "${YELLOW}示例:${NC}"
     echo "  claude-switcher moonshot                     # 直接启动moonshot配置"
     echo "  claude-switcher moonshot -- --help           # 透传 --help 给 claude"
+    echo "  claude-switcher moonshot --sync              # 切换并同步到 settings.json"
     echo "  claude-switcher --config work -- -v          # 透传 -v 给 claude"
     echo "  claude-switcher -- --version                 # 进入选择菜单，选中后透传 --version"
     echo "  claude-switcher --list             # 查看所有配置"
@@ -307,6 +375,7 @@ show_help_info() {
     echo "  • 无参数运行时进入交互式菜单"
     echo "  • 指定不存在的配置会显示可用配置列表"
     echo "  • 使用 -- 分隔后面的参数将原样传给 claude CLI"
+    echo "  • 使用 --sync 参数可将配置同步到 ~/.claude/settings.json"
 }
 
 # 列出可用配置
@@ -346,7 +415,8 @@ list_available_configs() {
 # 使用指定配置运行
 run_with_specified_config() {
     local config_name="$1"
-    shift || true
+    local sync_settings="${2:-false}"
+    shift 2 || true
     local -a forward_args=("$@")
 
     # 验证配置名称安全性
@@ -354,9 +424,9 @@ run_with_specified_config() {
         echo_error "配置名称格式不正确"
         exit 1
     fi
-    
+
     local config_file="$PROFILES_DIR/$config_name.conf"
-    
+
     if [ ! -f "$config_file" ]; then
         echo_error "配置 '$config_name' 不存在"
         echo
@@ -364,7 +434,15 @@ run_with_specified_config() {
         list_available_configs
         exit 1
     fi
-    
+
+    # 如果需要同步到 settings.json
+    if [ "$sync_settings" = true ]; then
+        if ! sync_profile_to_settings "$config_name"; then
+            echo_error "同步到 settings.json 失败"
+            exit 1
+        fi
+    fi
+
     # 设置为活动配置并启动
     set_active_profile "$config_name"
     echo_info "使用配置: $config_name"
@@ -413,6 +491,80 @@ test_config() {
         echo_success "配置验证通过"
         return 0
     fi
+}
+
+# 将 profile 配置同步到 settings.json
+sync_profile_to_settings() {
+    local profile_name="$1"
+    local config_file="$PROFILES_DIR/$profile_name.conf"
+
+    if [ ! -f "$config_file" ]; then
+        echo_error "配置文件不存在: $profile_name"
+        return 1
+    fi
+
+    echo_info "同步配置到 settings.json: $profile_name"
+
+    # 确保 ~/.claude 目录存在
+    mkdir -p "$(dirname "$SETTINGS_FILE")"
+
+    # 检查 jq 是否可用
+    if ! command -v jq &> /dev/null; then
+        echo_error "jq 未安装，请先安装 jq: brew install jq"
+        return 1
+    fi
+
+    # 创建临时文件用于构建新的 settings.json
+    local temp_settings_file=$(mktemp)
+
+    # 读取 profile 中的环境变量并构建 JSON
+    local env_json="{}"
+    while IFS= read -r line; do
+        # 跳过空行和注释行
+        if [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+
+        # 解析变量名和值
+        if [[ "$line" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
+            local var_name="${BASH_REMATCH[1]}"
+            local var_value="${BASH_REMATCH[2]}"
+
+            # 移除可能的引号
+            var_value="${var_value#\"}"
+            var_value="${var_value%\"}"
+            var_value="${var_value#\'}"
+            var_value="${var_value%\'}"
+
+            # 跳过 NAME 变量和以下划线开头的内部变量
+            if [ "$var_name" = "NAME" ] || [[ "$var_name" =~ ^_ ]]; then
+                continue
+            fi
+
+            # 使用 jq 添加键值对
+            env_json=$(echo "$env_json" | jq --arg key "$var_name" --arg value "$var_value" '.[$key] = $value')
+        fi
+    done < "$config_file"
+
+    # 读取现有的 settings.json 或创建新文件
+    if [ -f "$SETTINGS_FILE" ]; then
+        # 使用 jq 更新现有文件
+        jq --argjson new_env "$env_json" --arg profile "$profile_name" '.env = $new_env | ._claudeSwitcherProfile = $profile' "$SETTINGS_FILE" > "$temp_settings_file"
+        mv "$temp_settings_file" "$SETTINGS_FILE"
+        echo_success "已更新 ~/.claude/settings.json"
+    else
+        # 创建新的 settings.json
+        cat > "$SETTINGS_FILE" << EOF
+{
+  "env": $env_json,
+  "_claudeSwitcherProfile": "$profile_name"
+}
+EOF
+        echo_success "已创建 ~/.claude/settings.json"
+    fi
+
+    # 设置文件权限
+    chmod 600 "$SETTINGS_FILE"
 }
 
 # 重命名配置

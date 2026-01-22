@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go-version: ['1.23']
+        include:
+          - os: ubuntu-latest
+            ARCH: amd64
+          - os: macos-latest
+            ARCH: arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Build binary
+        run: |
+          OS=${{ matrix.os == 'ubuntu-latest' && 'linux' || 'darwin' }}
+          ARCH=${{ matrix.ARCH }}
+          GOOS=$OS GOARCH=$ARCH go build -o claude-switcher-${OS}-${ARCH}
+
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: claude-switcher-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run tests
+        run: go test ./... -v
