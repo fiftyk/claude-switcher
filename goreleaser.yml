@@ -1,6 +1,8 @@
 # Go Releaser 配置文件
 # 文档: https://goreleaser.com/
 
+version: 1
+
 before:
   hooks:
     - go mod tidy
