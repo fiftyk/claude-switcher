@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
+	"github.com/fiftyk/claude-switcher/cmd"
 	"github.com/fiftyk/claude-switcher/internal/config"
 	"github.com/fiftyk/claude-switcher/internal/profile"
 	"github.com/fiftyk/claude-switcher/internal/settings"
@@ -22,12 +22,6 @@ var (
 
 // 版本信息
 const appName = "Claude Switcher"
-
-// GetSettingsFilePath 返回 settings.json 的路径
-func GetSettingsFilePath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "settings.json")
-}
 
 func main() {
 	// 解析参数
@@ -261,7 +255,7 @@ func copyProfile(profilesDir, srcName, dstName string) {
 }
 
 func syncToSettings(profileName string, p *profile.Profile) error {
-	settingsPath := GetSettingsFilePath()
+	settingsPath := cmd.GetSettingsFilePath()
 
 	// 构建环境变量
 	envVars := make(map[string]string)
