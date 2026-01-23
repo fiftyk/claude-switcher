@@ -24,7 +24,7 @@ builds:
 
 archives:
   - name_template: '{{ .Binary }}-{{ .Os }}-{{ .Arch }}'
-    format: zip
+    format: binary
 
 checksum:
   name_template: '{{ .ProjectName }}-{{ .Version }}-checksums.txt'
