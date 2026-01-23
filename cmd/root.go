@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"github.com/fiftyk/claude-switcher/internal/config"
 	"github.com/fiftyk/claude-switcher/internal/profile"
@@ -23,12 +22,6 @@ type Profile struct {
 
 func (p *Profile) GetEnvVars() map[string]string {
 	return p.EnvVars
-}
-
-// GetSettingsFilePath 返回 settings.json 的路径
-func GetSettingsFilePath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude", "settings.json")
 }
 
 // BuildEnvVarsFromProfile 从 profile 构建环境变量 map
