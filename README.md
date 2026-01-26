@@ -12,6 +12,7 @@
 - **快速切换** - 自动记住上次使用的配置，按回车快速启动
 - **参数透传** - 支持将参数直接传递给 Claude CLI
 - **安全存储** - 配置文件权限保护，安全的环境变量处理
+- **自动更新** - 支持手动/自动检查更新，确保使用最新版本
 
 ## 安装
 
@@ -63,6 +64,12 @@ claude-switcher --rename old new
 
 # 复制配置
 claude-switcher --copy source target
+
+# 检查是否有新版本
+claude-switcher --check-update
+
+# 更新到最新版本
+claude-switcher --self-update
 
 # 显示帮助
 claude-switcher --help
@@ -122,6 +129,28 @@ https_proxy="http://127.0.0.1:7890"
 ANTHROPIC_MODEL="claude-3-5-sonnet-20240620"
 ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-3-haiku-20240307"
 ```
+
+## 自动更新
+
+Claude Switcher 支持自动更新功能：
+
+### 手动更新
+
+```bash
+# 检查是否有新版本
+claude-switcher --check-update
+
+# 更新到最新版本（会询问确认）
+claude-switcher --self-update
+```
+
+### 自动检查
+
+程序会在每次运行时自动检查更新（默认每 24 小时），如果发现新版本会提示您更新。
+
+### 更新配置
+
+更新检查配置保存在 `~/.claude-switcher/update.json`。
 
 ## 系统要求
 

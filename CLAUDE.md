@@ -41,7 +41,8 @@ curl -fsSL https://raw.githubusercontent.com/fiftyk/claude-switcher/main/install
 internal/
 ├── config/       # 配置目录管理、验证函数
 ├── profile/      # Profile 加载/保存、列表、重命名、复制
-└── settings/     # settings.json 读写、同步
+├── settings/     # settings.json 读写、同步
+└── update/       # 自动更新检查和安装
 main.go           # CLI 入口、参数解析
 ```
 
@@ -65,6 +66,35 @@ type Settings struct {
     Env                   map[string]string `json:"env,omitempty"`
     EnabledPlugins        map[string]bool   `json:"enabledPlugins,omitempty"`
     ClaudeSwitcherProfile string           `json:"_claudeSwitcherProfile,omitempty"` // 标记当前激活的配置
+}
+```
+
+**update.VersionInfo** - 版本信息
+```go
+type VersionInfo struct {
+    Major int
+    Minor int
+    Patch int
+}
+```
+
+**update.CheckConfig** - 自动更新检查配置
+```go
+type CheckConfig struct {
+    Repo      string        // GitHub 仓库
+    Interval  time.Duration // 检查间隔
+    LastCheck time.Time     // 上次检查时间
+    Enabled   bool          // 是否启用
+}
+```
+
+**update.UpdateResult** - 更新检查结果
+```go
+type UpdateResult struct {
+    HasUpdate    bool       // 是否有新版本
+    Latest       VersionInfo // 最新版本
+    DownloadURL  string     // 下载链接
+    ChangelogURL string     // 更新日志链接
 }
 ```
 
@@ -104,6 +134,10 @@ claude-switcher --list             # 列出所有配置
 claude-switcher --test <名称>      # 测试配置有效性
 claude-switcher --rename <旧> <新>  # 重命名配置
 claude-switcher --copy <源> <目标>  # 复制配置
+
+# 自动更新
+claude-switcher --check-update     # 检查是否有新版本
+claude-switcher --self-update      # 检查并更新到最新版本
 ```
 
 ## 开发注意事项
