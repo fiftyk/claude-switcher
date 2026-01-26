@@ -4,6 +4,7 @@
 
 ## 特性
 
+- **交互式菜单** - 运行 `claude-switcher` 进入可视化菜单，可浏览、选择、创建、编辑、删除配置
 - **一键启动** - 运行 `claude-switcher` 即可开始使用
 - **命令行参数** - 支持 `claude-switcher moonshot` 直接指定配置启动
 - **配置同步** - 使用 `--sync` 将配置同步到 `~/.claude/settings.json`
@@ -43,7 +44,7 @@ chmod +x /usr/local/bin/claude-switcher
 ### 基本命令
 
 ```bash
-# 交互式启动
+# 交互式启动（进入菜单界面）
 claude-switcher
 
 # 直接指定配置启动
@@ -75,7 +76,23 @@ claude-switcher --self-update
 claude-switcher --help
 ```
 
-### 参数透传
+### 交互式菜单
+
+运行 `claude-switcher` 不带参数时会进入交互式菜单，提供以下功能：
+
+| 按键 | 功能 |
+|------|------|
+| ↑/↓ 或 j/k | 上下移动选择配置 |
+| 回车 | 运行选中的配置 |
+| R | 运行配置并同步到 settings.json |
+| C | 创建新配置 |
+| E | 编辑选中的配置 |
+| D | 删除选中的配置 |
+| V | 查看配置详情 |
+| X | 导出配置（JSON/YAML/Shell） |
+| Q | 退出菜单 |
+
+配置列表中会显示配置名称和显示名称，方便识别。
 
 支持通过 `--` 分隔符将参数直接传递给 Claude CLI：
 
