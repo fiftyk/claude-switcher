@@ -49,8 +49,17 @@ func main() {
 	}
 
 	// 显示帮助
-	if *helpFlag || len(os.Args) == 1 {
+	if *helpFlag {
 		showHelp()
+		return
+	}
+
+	// 无参数时启动交互式菜单
+	if len(os.Args) == 1 {
+		if err := runInteractiveMenu(profilesDir); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -309,19 +318,39 @@ func runClaude(args ...string) {
 
 	// 构建命令
 	cmdArgs := append([]string{}, args...)
-	cmd := exec.Command("claude", cmdArgs...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	runCmd := exec.Command("claude", cmdArgs...)
+	runCmd.Stdin = os.Stdin
+	runCmd.Stdout = os.Stdout
+	runCmd.Stderr = os.Stderr
 
 	// 设置环境变量
 	env := os.Environ()
 	// 这里可以添加配置中的环境变量
-	cmd.Env = env
+	runCmd.Env = env
 
-	if err := cmd.Run(); err != nil {
+	if err := runCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+// runInteractiveMenu 运行交互式菜单并处理用户选择
+func runInteractiveMenu(profilesDir string) error {
+	handler := cmd.DefaultMenuHandler{}
+	syncer := cmd.DefaultSettingsSyncer{}
+
+	for {
+		action, name, err := handler.ShowMenu(profilesDir)
+		if err != nil {
+			return err
+		}
+
+		if err := cmd.HandleMenuAction(profilesDir, action, name, handler, syncer); err != nil {
+			if err == cmd.ErrQuit {
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 	}
 }
 
