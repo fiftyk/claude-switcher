@@ -54,6 +54,14 @@ func main() {
 		return
 	}
 
+	// 初始化配置目录
+	if err := config.EnsureConfigDir(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	profilesDir := config.GetProfilesDir()
+
 	// 无参数时启动交互式菜单
 	if len(os.Args) == 1 {
 		if err := runInteractiveMenu(profilesDir); err != nil {
@@ -62,14 +70,6 @@ func main() {
 		}
 		return
 	}
-
-	// 初始化配置目录
-	if err := config.EnsureConfigDir(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	profilesDir := config.GetProfilesDir()
 
 	// 处理透传参数（-- 之后的部分）
 	var forwardArgs []string
