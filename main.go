@@ -329,6 +329,14 @@ func runClaude(args ...string) {
 func checkForUpdates() {
 	currentVersion := update.ParseVersion(version)
 
+	// 检查是否为开发版本
+	if !currentVersion.IsValid() {
+		fmt.Println("当前版本: 开发版")
+		fmt.Println("无法检查更新（开发版本无法比较）")
+		fmt.Println("请从 Release 下载正式版本以使用自动更新功能")
+		return
+	}
+
 	fmt.Printf("当前版本: %s\n", currentVersion.String())
 	fmt.Println("检查更新...")
 
@@ -353,6 +361,14 @@ func checkForUpdates() {
 // doSelfUpdate 执行自更新
 func doSelfUpdate() {
 	currentVersion := update.ParseVersion(version)
+
+	// 检查是否为开发版本
+	if !currentVersion.IsValid() {
+		fmt.Println("当前版本: 开发版")
+		fmt.Println("无法自动更新（开发版本无法比较）")
+		fmt.Println("请从 Release 下载正式版本以使用自动更新功能")
+		return
+	}
 
 	fmt.Printf("当前版本: %s\n", currentVersion.String())
 	fmt.Println("检查更新...")

@@ -23,6 +23,10 @@ type VersionInfo struct {
 
 // ParseVersion 解析版本字符串
 func ParseVersion(s string) VersionInfo {
+	// 确保版本字符串有 v 前缀
+	if !strings.HasPrefix(s, "v") {
+		s = "v" + s
+	}
 	re := regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
 	matches := re.FindStringSubmatch(s)
 	if matches == nil {

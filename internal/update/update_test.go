@@ -46,9 +46,11 @@ func TestVersionInfo_Parse(t *testing.T) {
 		{"valid v1.0.0", "v1.0.0", 1, 0, 0, true},
 		{"valid v2.3.4", "v2.3.4", 2, 3, 4, true},
 		{"valid v0.0.1", "v0.0.1", 0, 0, 1, true},
+		{"valid without v prefix", "1.0.0", 1, 0, 0, true},
+		{"valid without v prefix 2.4.6", "2.4.6", 2, 4, 6, true},
 		{"invalid version", "invalid", 0, 0, 0, false},
 		{"empty version", "", 0, 0, 0, false},
-		{"missing v prefix", "1.0.0", 0, 0, 0, false},
+		{"development version", "dev", 0, 0, 0, false},
 	}
 
 	for _, tt := range tests {
