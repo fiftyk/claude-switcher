@@ -130,13 +130,20 @@ func GetActiveProfile() (string, error) {
 	return string(data), nil
 }
 
-// RunClaude 运行 claude CLI
-func RunClaude(args ...string) error {
+// RunClaude 运行 claude CLI，使用 profile 中的环境变量
+func RunClaude(p *profile.Profile, args ...string) error {
 	cmd := exec.Command("claude", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = os.Environ()
+
+	// 构建环境变量，profile 配置优先于现有环境
+	env := os.Environ()
+	profileEnv := BuildEnvVarsFromProfile(p)
+	for k, v := range profileEnv {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
+	cmd.Env = env
 
 	return cmd.Run()
 }

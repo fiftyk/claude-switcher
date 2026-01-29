@@ -17,7 +17,7 @@ var ErrQuit = errors.New("user quit")
 // MenuHandler 处理菜单操作的接口
 type MenuHandler interface {
 	ShowMenu(profilesDir string) (MenuAction, string, error)
-	RunClaude(args ...string) error
+	RunClaude(p *profile.Profile, args ...string) error
 	SetActiveProfile(name string) error
 }
 
@@ -33,8 +33,8 @@ func (h DefaultMenuHandler) ShowMenu(profilesDir string) (MenuAction, string, er
 	return ShowMenu(profilesDir)
 }
 
-func (h DefaultMenuHandler) RunClaude(args ...string) error {
-	return RunClaude(args...)
+func (h DefaultMenuHandler) RunClaude(p *profile.Profile, args ...string) error {
+	return RunClaude(p, args...)
 }
 
 func (h DefaultMenuHandler) SetActiveProfile(name string) error {
@@ -67,7 +67,7 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 		}
 
 		fmt.Printf("使用配置: %s\n", p.Name)
-		return handler.RunClaude()
+		return handler.RunClaude(p)
 
 	case ActionRunWithSync:
 		// 同步并运行配置
@@ -86,7 +86,7 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 		}
 
 		fmt.Printf("使用配置: %s\n", p.Name)
-		return handler.RunClaude()
+		return handler.RunClaude(p)
 
 	case ActionCreate:
 		// 创建新配置

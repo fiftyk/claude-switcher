@@ -169,7 +169,7 @@ func main() {
 		}
 
 		fmt.Printf("使用配置: %s\n", configNameFromArgs)
-		runClaude(forwardArgs...)
+		runClaude(p, forwardArgs...)
 		return
 	default:
 		showHelp()
@@ -306,7 +306,7 @@ func setActiveProfile(name string) error {
 	return os.WriteFile(activeFile, []byte(name), 0600)
 }
 
-func runClaude(args ...string) {
+func runClaude(p *profile.Profile, args ...string) {
 	// 检查 claude 是否安装
 	if _, err := os.Stat("/usr/local/bin/claude"); err != nil {
 		// 尝试在 PATH 中查找
@@ -323,9 +323,24 @@ func runClaude(args ...string) {
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 
-	// 设置环境变量
+	// 设置环境变量，profile 配置优先
 	env := os.Environ()
-	// 这里可以添加配置中的环境变量
+	if p.AuthToken != "" {
+		env = append(env, fmt.Sprintf("ANTHROPIC_AUTH_TOKEN=%s", p.AuthToken))
+	}
+	if p.BaseURL != "" {
+		env = append(env, fmt.Sprintf("ANTHROPIC_BASE_URL=%s", p.BaseURL))
+	}
+	if p.HTTPProxy != "" {
+		env = append(env, fmt.Sprintf("http_proxy=%s", p.HTTPProxy))
+		env = append(env, fmt.Sprintf("https_proxy=%s", p.HTTPProxy))
+	}
+	if p.Model != "" {
+		env = append(env, fmt.Sprintf("ANTHROPIC_MODEL=%s", p.Model))
+	}
+	for k, v := range p.EnvVars {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
 	runCmd.Env = env
 
 	if err := runCmd.Run(); err != nil {

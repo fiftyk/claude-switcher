@@ -25,7 +25,7 @@ func (m *mockMenuHandler) ShowMenu(profilesDir string) (MenuAction, string, erro
 	return m.returnAction, m.returnName, m.returnErr
 }
 
-func (m *mockMenuHandler) RunClaude(args ...string) error {
+func (m *mockMenuHandler) RunClaude(p *profile.Profile, args ...string) error {
 	m.runClaudeCalled = true
 	if m.shouldFail {
 		return errors.New("mock error")
