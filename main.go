@@ -160,6 +160,12 @@ func main() {
 				os.Exit(1)
 			}
 			fmt.Println("✓ 已同步到 settings.json")
+		} else {
+			// 如果不同步，清除 settings.json 中的环境变量，让 profile 优先
+			if err := cmd.ClearSettingsEnvVars(configNameFromArgs); err != nil {
+				// 静默失败，settings.json 可能不存在
+				_ = err
+			}
 		}
 
 		// 设置活动配置

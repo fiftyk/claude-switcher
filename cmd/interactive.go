@@ -62,6 +62,12 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 			return fmt.Errorf("加载配置失败: %w", err)
 		}
 
+		// 清除 settings.json 中的环境变量，让 profile 优先
+		if err := ClearSettingsEnvVars(name); err != nil {
+			// 静默失败，settings.json 可能不存在
+			_ = err
+		}
+
 		if err := handler.SetActiveProfile(name); err != nil {
 			return fmt.Errorf("设置活动配置失败: %w", err)
 		}

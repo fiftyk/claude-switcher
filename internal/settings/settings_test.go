@@ -188,3 +188,76 @@ func TestSettingsFilePermissions(t *testing.T) {
 		t.Errorf("File permissions = %v, want %v", perm, 0600)
 	}
 }
+
+func TestClearProfileEnvVars(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsFile := filepath.Join(tmpDir, "settings.json")
+
+	// 创建初始 settings.json，包含 profile 环境变量
+	initialContent := `{
+  "enabledPlugins": {
+    "test-plugin": true
+  },
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-old-token",
+    "ANTHROPIC_BASE_URL": "https://api.old.com",
+    "http_proxy": "http://old-proxy:7890",
+    "https_proxy": "http://old-proxy:7890",
+    "ANTHROPIC_MODEL": "claude-3-5-sonnet",
+    "CUSTOM_VAR": "custom-value"
+  },
+  "_claudeSwitcherProfile": "old-profile"
+}`
+	if err := os.WriteFile(settingsFile, []byte(initialContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 清除 profile 环境变量
+	if err := ClearProfileEnvVars(settingsFile, "old-profile"); err != nil {
+		t.Fatalf("ClearProfileEnvVars() error = %v", err)
+	}
+
+	// 验证
+	s, err := LoadSettings(settingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 应该清除的字段
+	if s.Env["ANTHROPIC_AUTH_TOKEN"] != "" {
+		t.Errorf("ANTHROPIC_AUTH_TOKEN should be cleared, got %v", s.Env["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if s.Env["ANTHROPIC_BASE_URL"] != "" {
+		t.Errorf("ANTHROPIC_BASE_URL should be cleared, got %v", s.Env["ANTHROPIC_BASE_URL"])
+	}
+	if s.Env["http_proxy"] != "" {
+		t.Errorf("http_proxy should be cleared, got %v", s.Env["http_proxy"])
+	}
+	if s.Env["https_proxy"] != "" {
+		t.Errorf("https_proxy should be cleared, got %v", s.Env["https_proxy"])
+	}
+	if s.Env["ANTHROPIC_MODEL"] != "" {
+		t.Errorf("ANTHROPIC_MODEL should be cleared, got %v", s.Env["ANTHROPIC_MODEL"])
+	}
+
+	// 应该保留的字段
+	if s.EnabledPlugins["test-plugin"] != true {
+		t.Error("enabledPlugins should be preserved")
+	}
+	if s.Env["CUSTOM_VAR"] != "custom-value" {
+		t.Errorf("CUSTOM_VAR should be preserved, got %v", s.Env["CUSTOM_VAR"])
+	}
+	if s.ClaudeSwitcherProfile != "" {
+		t.Errorf("ClaudeSwitcherProfile should be cleared, got %v", s.ClaudeSwitcherProfile)
+	}
+}
+
+func TestClearProfileEnvVarsFileNotExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsFile := filepath.Join(tmpDir, "nonexistent.json")
+
+	// 文件不存在时应该不报错
+	if err := ClearProfileEnvVars(settingsFile, "test-profile"); err != nil {
+		t.Errorf("ClearProfileEnvVars() error = %v, want nil", err)
+	}
+}

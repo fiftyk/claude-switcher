@@ -90,3 +90,36 @@ func SyncProfileToSettings(filePath, profileName string, envVars map[string]stri
 	// 保存
 	return SaveSettings(filePath, s)
 }
+
+// ClearProfileEnvVars 清除 settings.json 中与指定 profile 相关的环境变量
+// 这样可以让运行时 profile 的环境变量优先于 settings.json
+func ClearProfileEnvVars(filePath string, profileName string) error {
+	// 如果文件不存在，直接返回
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	s, err := LoadSettings(filePath)
+	if err != nil {
+		return err
+	}
+
+	// 需要清除的环境变量列表
+	keysToClear := []string{
+		"ANTHROPIC_AUTH_TOKEN",
+		"ANTHROPIC_BASE_URL",
+		"http_proxy",
+		"https_proxy",
+		"ANTHROPIC_MODEL",
+	}
+
+	// 清除这些键
+	for _, key := range keysToClear {
+		delete(s.Env, key)
+	}
+
+	// 清除 profile 标记
+	s.ClaudeSwitcherProfile = ""
+
+	return SaveSettings(filePath, s)
+}

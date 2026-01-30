@@ -117,6 +117,13 @@ func SetActiveProfile(name string) error {
 	return os.WriteFile(activeFile, []byte(name), 0600)
 }
 
+// ClearSettingsEnvVars 清除 settings.json 中与 profile 相关的环境变量
+// 这样可以让运行时 profile 的环境变量优先于 settings.json
+func ClearSettingsEnvVars(profileName string) error {
+	settingsPath := GetSettingsFilePath()
+	return settings.ClearProfileEnvVars(settingsPath, profileName)
+}
+
 // GetActiveProfile 获取活动配置
 func GetActiveProfile() (string, error) {
 	activeFile := config.GetActiveFile()
