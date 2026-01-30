@@ -11,26 +11,17 @@ import (
 
 // mockMenuHandler 用于测试
 type mockMenuHandler struct {
-	showMenuCalled   bool
-	setActiveCalled  bool
-	runClaudeCalled  bool
-	shouldFail       bool
-	returnAction     MenuAction
-	returnName       string
-	returnErr        error
+	showMenuCalled  bool
+	setActiveCalled bool
+	shouldFail      bool
+	returnAction    MenuAction
+	returnName      string
+	returnErr       error
 }
 
 func (m *mockMenuHandler) ShowMenu(profilesDir string) (MenuAction, string, error) {
 	m.showMenuCalled = true
 	return m.returnAction, m.returnName, m.returnErr
-}
-
-func (m *mockMenuHandler) RunClaude(p *profile.Profile, args ...string) error {
-	m.runClaudeCalled = true
-	if m.shouldFail {
-		return errors.New("mock error")
-	}
-	return nil
 }
 
 func (m *mockMenuHandler) SetActiveProfile(name string) error {
@@ -41,41 +32,38 @@ func (m *mockMenuHandler) SetActiveProfile(name string) error {
 	return nil
 }
 
-// mockSettingsSyncer 用于测试
-type mockSettingsSyncer struct {
-	syncCalled bool
-	shouldFail bool
-}
-
-func (s *mockSettingsSyncer) SyncToSettings(profileName string, p *profile.Profile) error {
-	s.syncCalled = true
-	if s.shouldFail {
-		return errors.New("mock sync error")
-	}
-	return nil
-}
-
-// noopSettingsSyncer 不进行实际同步的 syncer（用于测试）
-type noopSettingsSyncer struct{}
-
-func (s noopSettingsSyncer) SyncToSettings(profileName string, p *profile.Profile) error {
-	return nil
-}
-
+// TestHandleMenuAction_Quit 测试退出操作
 func TestHandleMenuAction_Quit(t *testing.T) {
+	// Mock RunClaude 和 SyncToSettings
+	runClaudeFunc = func() error { return nil }
+	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { return nil }
+	defer func() {
+		runClaudeFunc = defaultRunClaude
+		syncToSettingsFunc = defaultSyncToSettings
+	}()
+
 	profilesDir := t.TempDir()
 	handler := &mockMenuHandler{
 		returnAction: ActionQuit,
 	}
-	syncer := noopSettingsSyncer{}
 
-	err := HandleMenuAction(profilesDir, ActionQuit, "", handler, syncer)
+	err := HandleMenuAction(profilesDir, ActionQuit, "", handler)
 	if err != ErrQuit {
 		t.Errorf("expected ErrQuit, got %v", err)
 	}
 }
 
+// TestHandleMenuAction_Run 测试运行操作
 func TestHandleMenuAction_Run(t *testing.T) {
+	// Mock RunClaude 和 SyncToSettings
+	syncCalled := false
+	runClaudeFunc = func() error { return nil }
+	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { syncCalled = true; return nil }
+	defer func() {
+		runClaudeFunc = defaultRunClaude
+		syncToSettingsFunc = defaultSyncToSettings
+	}()
+
 	profilesDir := t.TempDir()
 
 	// 创建测试配置
@@ -95,55 +83,20 @@ func TestHandleMenuAction_Run(t *testing.T) {
 		returnAction: ActionRun,
 		returnName:   "test",
 	}
-	syncer := noopSettingsSyncer{}
 
-	err := HandleMenuAction(profilesDir, ActionRun, "test", handler, syncer)
+	err := HandleMenuAction(profilesDir, ActionRun, "test", handler)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 	if !handler.setActiveCalled {
 		t.Error("expected SetActiveProfile to be called")
 	}
-	if !handler.runClaudeCalled {
-		t.Error("expected RunClaude to be called")
-	}
-}
-
-func TestHandleMenuAction_RunWithSync(t *testing.T) {
-	profilesDir := t.TempDir()
-
-	// 创建测试配置
-	p := &profile.Profile{
-		Name:       "test",
-		AuthToken:  "sk-test",
-		BaseURL:    "https://api.example.com",
-	}
-	content := formatProfile(p)
-	if err := os.WriteFile(filepath.Join(profilesDir, "test.conf"), []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := &mockMenuHandler{
-		returnAction: ActionRunWithSync,
-		returnName:   "test",
-	}
-	syncer := &mockSettingsSyncer{}
-
-	err := HandleMenuAction(profilesDir, ActionRunWithSync, "test", handler, syncer)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if !handler.setActiveCalled {
-		t.Error("expected SetActiveProfile to be called")
-	}
-	if !handler.runClaudeCalled {
-		t.Error("expected RunClaude to be called")
-	}
-	if !syncer.syncCalled {
+	if !syncCalled {
 		t.Error("expected SyncToSettings to be called")
 	}
 }
 
+// TestHandleMenuAction_Edit 测试编辑操作
 func TestHandleMenuAction_Edit(t *testing.T) {
 	profilesDir := t.TempDir()
 
@@ -168,6 +121,7 @@ func TestHandleMenuAction_Edit(t *testing.T) {
 	}
 }
 
+// TestHandleMenuAction_Delete 测试删除操作
 func TestHandleMenuAction_Delete(t *testing.T) {
 	profilesDir := t.TempDir()
 
@@ -197,6 +151,7 @@ func TestHandleMenuAction_Delete(t *testing.T) {
 	}
 }
 
+// TestHandleMenuAction_ShowDetails 测试显示详情操作
 func TestHandleMenuAction_ShowDetails(t *testing.T) {
 	profilesDir := t.TempDir()
 
@@ -221,6 +176,7 @@ func TestHandleMenuAction_ShowDetails(t *testing.T) {
 	}
 }
 
+// TestHandleMenuAction_Export 测试导出操作
 func TestHandleMenuAction_Export(t *testing.T) {
 	profilesDir := t.TempDir()
 
@@ -248,21 +204,30 @@ func TestHandleMenuAction_Export(t *testing.T) {
 	}
 }
 
+// TestHandleMenuAction_LoadProfileError 测试加载配置错误
 func TestHandleMenuAction_LoadProfileError(t *testing.T) {
+	// Mock SyncToSettings
+	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { return nil }
+	defer func() { syncToSettingsFunc = defaultSyncToSettings }()
+
 	profilesDir := t.TempDir()
 	handler := &mockMenuHandler{
 		returnAction: ActionRun,
 		returnName:   "nonexistent",
 	}
-	syncer := noopSettingsSyncer{}
 
-	err := HandleMenuAction(profilesDir, ActionRun, "nonexistent", handler, syncer)
+	err := HandleMenuAction(profilesDir, ActionRun, "nonexistent", handler)
 	if err == nil {
 		t.Error("expected error for nonexistent profile")
 	}
 }
 
+// TestHandleMenuAction_SetActiveProfileError 测试设置活动配置错误
 func TestHandleMenuAction_SetActiveProfileError(t *testing.T) {
+	// Mock SyncToSettings
+	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { return nil }
+	defer func() { syncToSettingsFunc = defaultSyncToSettings }()
+
 	profilesDir := t.TempDir()
 
 	// 创建测试配置
@@ -280,35 +245,9 @@ func TestHandleMenuAction_SetActiveProfileError(t *testing.T) {
 		returnName:   "test",
 		shouldFail:   true,
 	}
-	syncer := noopSettingsSyncer{}
 
-	err := HandleMenuAction(profilesDir, ActionRun, "test", handler, syncer)
+	err := HandleMenuAction(profilesDir, ActionRun, "test", handler)
 	if err == nil {
 		t.Error("expected error when SetActiveProfile fails")
-	}
-}
-
-func TestHandleMenuAction_SyncError(t *testing.T) {
-	profilesDir := t.TempDir()
-
-	// 创建测试配置
-	p := &profile.Profile{
-		Name:      "test",
-		AuthToken: "sk-test",
-	}
-	content := formatProfile(p)
-	if err := os.WriteFile(filepath.Join(profilesDir, "test.conf"), []byte(content), 0600); err != nil {
-		t.Fatal(err)
-	}
-
-	handler := &mockMenuHandler{
-		returnAction: ActionRunWithSync,
-		returnName:   "test",
-	}
-	syncer := &mockSettingsSyncer{shouldFail: true}
-
-	err := HandleMenuAction(profilesDir, ActionRunWithSync, "test", handler, syncer)
-	if err == nil {
-		t.Error("expected error when SyncToSettings fails")
 	}
 }

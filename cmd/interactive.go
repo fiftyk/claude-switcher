@@ -14,16 +14,26 @@ import (
 // ErrQuit 表示用户选择退出
 var ErrQuit = errors.New("user quit")
 
+// runClaudeFunc 用于运行 claude CLI，可被测试 mock
+var runClaudeFunc = defaultRunClaude
+
+// defaultRunClaude 默认的 RunClaude 实现
+func defaultRunClaude() error {
+	return RunClaude()
+}
+
+// syncToSettingsFunc 用于同步到 settings.json，可被测试 mock
+var syncToSettingsFunc = defaultSyncToSettings
+
+// defaultSyncToSettings 默认的 SyncToSettings 实现
+func defaultSyncToSettings(profileName string, p *profile.Profile) error {
+	return SyncToSettings(profileName, p)
+}
+
 // MenuHandler 处理菜单操作的接口
 type MenuHandler interface {
 	ShowMenu(profilesDir string) (MenuAction, string, error)
-	RunClaude(p *profile.Profile, args ...string) error
 	SetActiveProfile(name string) error
-}
-
-// SettingsSyncer 同步配置到 settings.json 的接口
-type SettingsSyncer interface {
-	SyncToSettings(profileName string, p *profile.Profile) error
 }
 
 // DefaultMenuHandler 默认实现
@@ -33,66 +43,35 @@ func (h DefaultMenuHandler) ShowMenu(profilesDir string) (MenuAction, string, er
 	return ShowMenu(profilesDir)
 }
 
-func (h DefaultMenuHandler) RunClaude(p *profile.Profile, args ...string) error {
-	return RunClaude(p, args...)
-}
-
 func (h DefaultMenuHandler) SetActiveProfile(name string) error {
 	return SetActiveProfile(name)
 }
 
-// DefaultSettingsSyncer 默认的 SettingsSyncer 实现
-type DefaultSettingsSyncer struct{}
-
-func (s DefaultSettingsSyncer) SyncToSettings(profileName string, p *profile.Profile) error {
-	return SyncToSettings(profileName, p)
-}
-
 // HandleMenuAction 处理菜单返回的操作
-func HandleMenuAction(profilesDir string, action MenuAction, name string, handler MenuHandler, syncer SettingsSyncer) error {
+func HandleMenuAction(profilesDir string, action MenuAction, name string, handler MenuHandler) error {
 	switch action {
 	case ActionQuit:
 		// 正常退出
 		return ErrQuit
 
 	case ActionRun:
-		// 运行配置
+		// 运行配置（会自动同步到 settings.json）
 		p, err := profile.LoadProfile(profilesDir, name)
 		if err != nil {
 			return fmt.Errorf("加载配置失败: %w", err)
 		}
 
-		// 清除 settings.json 中的环境变量，让 profile 优先
-		if err := ClearSettingsEnvVars(name); err != nil {
-			// 静默失败，settings.json 可能不存在
-			_ = err
-		}
-
-		if err := handler.SetActiveProfile(name); err != nil {
-			return fmt.Errorf("设置活动配置失败: %w", err)
-		}
-
-		fmt.Printf("使用配置: %s\n", p.Name)
-		return handler.RunClaude(p)
-
-	case ActionRunWithSync:
-		// 同步并运行配置
-		p, err := profile.LoadProfile(profilesDir, name)
-		if err != nil {
-			return fmt.Errorf("加载配置失败: %w", err)
-		}
-
-		if err := syncer.SyncToSettings(name, p); err != nil {
+		// 同步到 settings.json
+		if err := syncToSettingsFunc(name, p); err != nil {
 			return fmt.Errorf("同步到 settings.json 失败: %w", err)
 		}
-		fmt.Println("✓ 已同步到 settings.json")
 
 		if err := handler.SetActiveProfile(name); err != nil {
 			return fmt.Errorf("设置活动配置失败: %w", err)
 		}
 
 		fmt.Printf("使用配置: %s\n", p.Name)
-		return handler.RunClaude(p)
+		return runClaudeFunc()
 
 	case ActionCreate:
 		// 创建新配置

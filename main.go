@@ -31,7 +31,6 @@ const updateRepo = "fiftyk/claude-switcher"
 func main() {
 	// 解析参数
 	configName := flag.String("config", "", "指定配置名称")
-	syncSettings := flag.Bool("sync", false, "同步到 settings.json")
 	listFlag := flag.Bool("list", false, "列出所有配置")
 	testFlag := flag.String("test", "", "测试配置")
 	renameFlag := flag.String("rename", "", "重命名配置")
@@ -87,15 +86,11 @@ func main() {
 			if args[0] == "-c" || args[0] == "--config" {
 				configNameFromArgs = args[1]
 				args = args[2:]
-			} else if !strings.HasPrefix(args[1], "-") && args[1] != "--sync" {
+			} else if !strings.HasPrefix(args[1], "-") {
 				// 可能是 <name> <arg> 形式
 				configNameFromArgs = args[0]
 				forwardArgs = args[1:]
 				args = []string{}
-			} else if args[1] == "--sync" {
-				configNameFromArgs = args[0]
-				*syncSettings = true
-				args = args[2:]
 			}
 		} else if len(args) == 1 {
 			configNameFromArgs = args[0]
@@ -153,19 +148,10 @@ func main() {
 			os.Exit(1)
 		}
 
-		// 如果需要同步到 settings.json
-		if *syncSettings {
-			if err := syncToSettings(configNameFromArgs, p); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: 同步到 settings.json 失败: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Println("✓ 已同步到 settings.json")
-		} else {
-			// 如果不同步，清除 settings.json 中的环境变量，让 profile 优先
-			if err := cmd.ClearSettingsEnvVars(configNameFromArgs); err != nil {
-				// 静默失败，settings.json 可能不存在
-				_ = err
-			}
+		// 同步配置到 settings.json
+		if err := syncToSettings(configNameFromArgs, p); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: 同步到 settings.json 失败: %v\n", err)
+			os.Exit(1)
 		}
 
 		// 设置活动配置
@@ -175,7 +161,7 @@ func main() {
 		}
 
 		fmt.Printf("使用配置: %s\n", configNameFromArgs)
-		runClaude(p, forwardArgs...)
+		runClaude(forwardArgs...)
 		return
 	default:
 		showHelp()
@@ -197,7 +183,6 @@ func showHelp() {
 用法:
   claude-switcher                    启动交互式配置选择
   claude-switcher <配置名称> [-- <参数...>]  使用指定配置启动，可透传参数
-  claude-switcher <配置名称> --sync         切换配置并同步到 settings.json
   claude-switcher --config <名称> [-- <参数...>] 使用指定配置启动，可透传参数
   claude-switcher --list             列出所有可用配置
   claude-switcher --test <名称>      测试配置有效性
@@ -211,7 +196,7 @@ func showHelp() {
 说明:
   • 配置文件位于: ~/.claude-switcher/profiles/
   • 无参数运行时进入交互式菜单
-  • 使用 --sync 参数可将配置同步到 ~/.claude/settings.json
+  • 每次切换配置都会自动同步到 ~/.claude/settings.json
   • 使用 --check-update 或 --self-update 管理程序更新
 
 `, appName, version)
@@ -312,7 +297,7 @@ func setActiveProfile(name string) error {
 	return os.WriteFile(activeFile, []byte(name), 0600)
 }
 
-func runClaude(p *profile.Profile, args ...string) {
+func runClaude(args ...string) {
 	// 检查 claude 是否安装
 	if _, err := os.Stat("/usr/local/bin/claude"); err != nil {
 		// 尝试在 PATH 中查找
@@ -328,26 +313,7 @@ func runClaude(p *profile.Profile, args ...string) {
 	runCmd.Stdin = os.Stdin
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
-
-	// 设置环境变量，profile 配置优先
-	env := os.Environ()
-	if p.AuthToken != "" {
-		env = append(env, fmt.Sprintf("ANTHROPIC_AUTH_TOKEN=%s", p.AuthToken))
-	}
-	if p.BaseURL != "" {
-		env = append(env, fmt.Sprintf("ANTHROPIC_BASE_URL=%s", p.BaseURL))
-	}
-	if p.HTTPProxy != "" {
-		env = append(env, fmt.Sprintf("http_proxy=%s", p.HTTPProxy))
-		env = append(env, fmt.Sprintf("https_proxy=%s", p.HTTPProxy))
-	}
-	if p.Model != "" {
-		env = append(env, fmt.Sprintf("ANTHROPIC_MODEL=%s", p.Model))
-	}
-	for k, v := range p.EnvVars {
-		env = append(env, fmt.Sprintf("%s=%s", k, v))
-	}
-	runCmd.Env = env
+	runCmd.Env = os.Environ()
 
 	if err := runCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -358,7 +324,6 @@ func runClaude(p *profile.Profile, args ...string) {
 // runInteractiveMenu 运行交互式菜单并处理用户选择
 func runInteractiveMenu(profilesDir string) error {
 	handler := cmd.DefaultMenuHandler{}
-	syncer := cmd.DefaultSettingsSyncer{}
 
 	for {
 		action, name, err := handler.ShowMenu(profilesDir)
@@ -366,7 +331,7 @@ func runInteractiveMenu(profilesDir string) error {
 			return err
 		}
 
-		if err := cmd.HandleMenuAction(profilesDir, action, name, handler, syncer); err != nil {
+		if err := cmd.HandleMenuAction(profilesDir, action, name, handler); err != nil {
 			if err == cmd.ErrQuit {
 				return nil
 			}
