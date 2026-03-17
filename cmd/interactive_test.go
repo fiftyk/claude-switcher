@@ -53,7 +53,7 @@ func TestHandleMenuAction_Quit(t *testing.T) {
 	}
 }
 
-// TestHandleMenuAction_Run 测试运行操作
+// TestHandleMenuAction_Run 测试运行操作（不应自动同步到 settings.json）
 func TestHandleMenuAction_Run(t *testing.T) {
 	// Mock RunClaude 和 SyncToSettings
 	syncCalled := false
@@ -91,8 +91,37 @@ func TestHandleMenuAction_Run(t *testing.T) {
 	if !handler.setActiveCalled {
 		t.Error("expected SetActiveProfile to be called")
 	}
+	if syncCalled {
+		t.Error("expected SyncToSettings NOT to be called during ActionRun")
+	}
+}
+
+// TestHandleMenuAction_Sync 测试同步操作
+func TestHandleMenuAction_Sync(t *testing.T) {
+	syncCalled := false
+	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { syncCalled = true; return nil }
+	defer func() { syncToSettingsFunc = defaultSyncToSettings }()
+
+	profilesDir := t.TempDir()
+
+	// 创建测试配置
+	p := &profile.Profile{
+		Name:      "test",
+		AuthToken: "sk-test",
+	}
+	content := formatProfile(p)
+	if err := os.WriteFile(filepath.Join(profilesDir, "test.conf"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := &mockMenuHandler{}
+
+	err := HandleMenuAction(profilesDir, ActionSync, "test", handler)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
 	if !syncCalled {
-		t.Error("expected SyncToSettings to be called")
+		t.Error("expected SyncToSettings to be called during ActionSync")
 	}
 }
 

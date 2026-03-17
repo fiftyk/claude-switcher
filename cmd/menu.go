@@ -23,6 +23,7 @@ const (
 	ActionImport
 	ActionExport
 	ActionShowDetails
+	ActionSync
 	ActionQuit
 )
 
@@ -135,10 +136,12 @@ func ShowMenu(profilesDir string) (MenuAction, string, error) {
 		}
 
 		if input == "s" || input == "sync" {
-			fmt.Println("\n提示: 切换配置时会自动同步到 settings.json，无需手动操作")
-			fmt.Print("按回车键继续...")
-			reader.ReadString('\n')
-			continue
+			name, err := selectProfile(profiles, "同步到 settings.json")
+			if err != nil {
+				fmt.Printf("错误: %v\n", err)
+				continue
+			}
+			return ActionSync, name, nil
 		}
 
 		if input == "v" || input == "vars" || input == "env" {

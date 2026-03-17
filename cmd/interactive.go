@@ -55,15 +55,10 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 		return ErrQuit
 
 	case ActionRun:
-		// 运行配置（会自动同步到 settings.json）
+		// 运行配置（不自动同步到 settings.json）
 		p, err := profile.LoadProfile(profilesDir, name)
 		if err != nil {
 			return fmt.Errorf("加载配置失败: %w", err)
-		}
-
-		// 同步到 settings.json
-		if err := syncToSettingsFunc(name, p); err != nil {
-			return fmt.Errorf("同步到 settings.json 失败: %w", err)
 		}
 
 		if err := handler.SetActiveProfile(name); err != nil {
@@ -72,6 +67,20 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 
 		fmt.Printf("使用配置: %s\n", p.Name)
 		return runClaudeFunc()
+
+	case ActionSync:
+		// 同步配置到 settings.json
+		p, err := profile.LoadProfile(profilesDir, name)
+		if err != nil {
+			return fmt.Errorf("加载配置失败: %w", err)
+		}
+
+		if err := syncToSettingsFunc(name, p); err != nil {
+			return fmt.Errorf("同步到 settings.json 失败: %w", err)
+		}
+
+		fmt.Printf("✓ 已将配置 '%s' 同步到 settings.json\n", name)
+		return nil
 
 	case ActionCreate:
 		// 创建新配置

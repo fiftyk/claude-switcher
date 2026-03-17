@@ -163,6 +163,74 @@ func TestSyncProfileToSettingsNewFile(t *testing.T) {
 	}
 }
 
+// TestSyncProfileToSettingsClearsOldEnv 验证 sync 时清空旧的 env 变量
+func TestSyncProfileToSettingsClearsOldEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsFile := filepath.Join(tmpDir, "settings.json")
+
+	// 创建包含旧环境变量的 settings.json
+	initialContent := `{
+  "enabledPlugins": {
+    "test-plugin": true
+  },
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "old-token",
+    "ANTHROPIC_BASE_URL": "https://old.api.com",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M2.5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M2.5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "MiniMax-M2.5"
+  },
+  "_claudeSwitcherProfile": "old-profile"
+}`
+	if err := os.WriteFile(settingsFile, []byte(initialContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 用新 profile 同步，只包含 token 和 base_url
+	newEnvVars := map[string]string{
+		"ANTHROPIC_AUTH_TOKEN": "new-token",
+		"ANTHROPIC_BASE_URL":  "https://new.api.com",
+	}
+
+	if err := SyncProfileToSettings(settingsFile, "new-profile", newEnvVars); err != nil {
+		t.Fatalf("SyncProfileToSettings() error = %v", err)
+	}
+
+	s, err := LoadSettings(settingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 新 profile 的变量应该存在
+	if s.Env["ANTHROPIC_AUTH_TOKEN"] != "new-token" {
+		t.Errorf("ANTHROPIC_AUTH_TOKEN = %v, want new-token", s.Env["ANTHROPIC_AUTH_TOKEN"])
+	}
+	if s.Env["ANTHROPIC_BASE_URL"] != "https://new.api.com" {
+		t.Errorf("ANTHROPIC_BASE_URL = %v, want https://new.api.com", s.Env["ANTHROPIC_BASE_URL"])
+	}
+
+	// 旧 profile 残留的变量应该被清除
+	if _, exists := s.Env["ANTHROPIC_DEFAULT_HAIKU_MODEL"]; exists {
+		t.Error("ANTHROPIC_DEFAULT_HAIKU_MODEL should be cleared after sync")
+	}
+	if _, exists := s.Env["ANTHROPIC_DEFAULT_OPUS_MODEL"]; exists {
+		t.Error("ANTHROPIC_DEFAULT_OPUS_MODEL should be cleared after sync")
+	}
+	if _, exists := s.Env["ANTHROPIC_DEFAULT_SONNET_MODEL"]; exists {
+		t.Error("ANTHROPIC_DEFAULT_SONNET_MODEL should be cleared after sync")
+	}
+
+	// enabledPlugins 应该保留
+	if !s.EnabledPlugins["test-plugin"] {
+		t.Error("enabledPlugins should be preserved")
+	}
+
+	// profile 标记应该更新
+	if s.ClaudeSwitcherProfile != "new-profile" {
+		t.Errorf("ClaudeSwitcherProfile = %v, want new-profile", s.ClaudeSwitcherProfile)
+	}
+}
+
 func TestSettingsFilePermissions(t *testing.T) {
 	tmpDir := t.TempDir()
 	settingsFile := filepath.Join(tmpDir, "settings.json")
@@ -259,5 +327,67 @@ func TestClearProfileEnvVarsFileNotExist(t *testing.T) {
 	// 文件不存在时应该不报错
 	if err := ClearProfileEnvVars(settingsFile, "test-profile"); err != nil {
 		t.Errorf("ClearProfileEnvVars() error = %v, want nil", err)
+	}
+}
+
+// TestSyncProfileToSettingsPreservesUnknownFields 验证 sync 时保留未知字段
+func TestSyncProfileToSettingsPreservesUnknownFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	settingsFile := filepath.Join(tmpDir, "settings.json")
+
+	initialContent := `{
+  "env": {
+    "OLD_VAR": "old-value"
+  },
+  "enabledPlugins": {
+    "test-plugin": true
+  },
+  "_claudeSwitcherProfile": "old-profile",
+  "skipDangerousModePermissionPrompt": true,
+  "someOtherSetting": "value"
+}`
+	if err := os.WriteFile(settingsFile, []byte(initialContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	envVars := map[string]string{
+		"NEW_VAR": "new-value",
+	}
+
+	if err := SyncProfileToSettings(settingsFile, "new-profile", envVars); err != nil {
+		t.Fatalf("SyncProfileToSettings() error = %v", err)
+	}
+
+	// 读取原始 JSON 验证未知字段被保留
+	data, err := os.ReadFile(settingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, exists := raw["skipDangerousModePermissionPrompt"]; !exists {
+		t.Error("skipDangerousModePermissionPrompt should be preserved")
+	}
+	if _, exists := raw["someOtherSetting"]; !exists {
+		t.Error("someOtherSetting should be preserved")
+	}
+
+	// 已知字段也应该正确
+	s, err := LoadSettings(settingsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Env["NEW_VAR"] != "new-value" {
+		t.Errorf("Env[NEW_VAR] = %v, want new-value", s.Env["NEW_VAR"])
+	}
+	if !s.EnabledPlugins["test-plugin"] {
+		t.Error("enabledPlugins should be preserved")
+	}
+	if s.ClaudeSwitcherProfile != "new-profile" {
+		t.Errorf("ClaudeSwitcherProfile = %v, want new-profile", s.ClaudeSwitcherProfile)
 	}
 }

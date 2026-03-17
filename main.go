@@ -11,7 +11,6 @@ import (
 	"github.com/fiftyk/claude-switcher/cmd"
 	"github.com/fiftyk/claude-switcher/internal/config"
 	"github.com/fiftyk/claude-switcher/internal/profile"
-	"github.com/fiftyk/claude-switcher/internal/settings"
 	"github.com/fiftyk/claude-switcher/internal/update"
 )
 
@@ -32,6 +31,7 @@ func main() {
 	// 解析参数
 	configName := flag.String("config", "", "指定配置名称")
 	listFlag := flag.Bool("list", false, "列出所有配置")
+	syncFlag := flag.Bool("sync", false, "同步配置到 settings.json")
 	testFlag := flag.String("test", "", "测试配置")
 	renameFlag := flag.String("rename", "", "重命名配置")
 	copyFlag := flag.String("copy", "", "复制配置")
@@ -73,29 +73,43 @@ func main() {
 	// 处理透传参数（-- 之后的部分）
 	var forwardArgs []string
 	var configNameFromArgs string
+	syncRequested := *syncFlag
 	args := os.Args[1:]
 
-	// 检测是否有 -- 分隔符
+	// 先按 -- 分隔，--sync 只在 -- 之前有效
+	var beforeSep, afterSep []string
 	if idx := indexOf(args, "--"); idx >= 0 {
-		configNameFromArgs = args[0]
-		forwardArgs = args[idx+1:]
-		args = args[:idx]
+		beforeSep = args[:idx]
+		afterSep = args[idx+1:]
 	} else {
-		// 检查是否有其他参数形式
-		if len(args) >= 2 {
-			if args[0] == "-c" || args[0] == "--config" {
-				configNameFromArgs = args[1]
-				args = args[2:]
-			} else if !strings.HasPrefix(args[1], "-") {
-				// 可能是 <name> <arg> 形式
-				configNameFromArgs = args[0]
-				forwardArgs = args[1:]
-				args = []string{}
-			}
-		} else if len(args) == 1 {
+		beforeSep = args
+	}
+
+	// 从 -- 之前的参数中检测并移除 --sync
+	var filteredArgs []string
+	for _, arg := range beforeSep {
+		if arg == "--sync" {
+			syncRequested = true
+		} else {
+			filteredArgs = append(filteredArgs, arg)
+		}
+	}
+	args = filteredArgs
+	forwardArgs = afterSep
+
+	// 解析配置名称
+	if len(args) >= 2 {
+		if args[0] == "-c" || args[0] == "--config" {
+			configNameFromArgs = args[1]
+			args = args[2:]
+		} else if !strings.HasPrefix(args[1], "-") {
 			configNameFromArgs = args[0]
+			forwardArgs = append(args[1:], forwardArgs...)
 			args = []string{}
 		}
+	} else if len(args) == 1 {
+		configNameFromArgs = args[0]
+		args = []string{}
 	}
 
 	// 使用 flag 解析的值作为后备
@@ -148,10 +162,13 @@ func main() {
 			os.Exit(1)
 		}
 
-		// 同步配置到 settings.json
-		if err := syncToSettings(configNameFromArgs, p); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: 同步到 settings.json 失败: %v\n", err)
-			os.Exit(1)
+		// 仅在指定 --sync 时同步配置到 settings.json
+		if syncRequested {
+			if err := cmd.SyncToSettings(configNameFromArgs, p); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: 同步到 settings.json 失败: %v\n", err)
+				os.Exit(1)
+			}
+			fmt.Println("✓ 已同步到 settings.json")
 		}
 
 		// 设置活动配置
@@ -183,6 +200,7 @@ func showHelp() {
 用法:
   claude-switcher                    启动交互式配置选择
   claude-switcher <配置名称> [-- <参数...>]  使用指定配置启动，可透传参数
+  claude-switcher <配置名称> --sync   切换配置并同步到 settings.json
   claude-switcher --config <名称> [-- <参数...>] 使用指定配置启动，可透传参数
   claude-switcher --list             列出所有可用配置
   claude-switcher --test <名称>      测试配置有效性
@@ -196,7 +214,7 @@ func showHelp() {
 说明:
   • 配置文件位于: ~/.claude-switcher/profiles/
   • 无参数运行时进入交互式菜单
-  • 每次切换配置都会自动同步到 ~/.claude/settings.json
+  • 使用 --sync 参数可将配置同步到 ~/.claude/settings.json
   • 使用 --check-update 或 --self-update 管理程序更新
 
 `, appName, version)
@@ -268,28 +286,6 @@ func copyProfile(profilesDir, srcName, dstName string) {
 		os.Exit(1)
 	}
 	fmt.Printf("✓ 已复制: %s -> %s\n", srcName, dstName)
-}
-
-func syncToSettings(profileName string, p *profile.Profile) error {
-	settingsPath := cmd.GetSettingsFilePath()
-
-	// 构建环境变量
-	envVars := make(map[string]string)
-	if p.AuthToken != "" {
-		envVars["ANTHROPIC_AUTH_TOKEN"] = p.AuthToken
-	}
-	if p.BaseURL != "" {
-		envVars["ANTHROPIC_BASE_URL"] = p.BaseURL
-	}
-	if p.HTTPProxy != "" {
-		envVars["http_proxy"] = p.HTTPProxy
-		envVars["https_proxy"] = p.HTTPProxy
-	}
-	for k, v := range p.EnvVars {
-		envVars[k] = v
-	}
-
-	return settings.SyncProfileToSettings(settingsPath, profileName, envVars)
 }
 
 func setActiveProfile(name string) error {

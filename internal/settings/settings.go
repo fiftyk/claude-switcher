@@ -9,9 +9,67 @@ import (
 
 // Settings 表示 ~/.claude/settings.json 的结构
 type Settings struct {
-	Env                   map[string]string `json:"env,omitempty"`
-	EnabledPlugins        map[string]bool   `json:"enabledPlugins,omitempty"`
-	ClaudeSwitcherProfile string           `json:"_claudeSwitcherProfile,omitempty"`
+	Env                   map[string]string          `json:"env,omitempty"`
+	EnabledPlugins        map[string]bool             `json:"enabledPlugins,omitempty"`
+	ClaudeSwitcherProfile string                      `json:"_claudeSwitcherProfile,omitempty"`
+	Extra                 map[string]json.RawMessage  `json:"-"` // 保留未知字段
+}
+
+// UnmarshalJSON 自定义反序列化，保留未知字段
+func (s *Settings) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	if v, ok := raw["env"]; ok {
+		json.Unmarshal(v, &s.Env)
+		delete(raw, "env")
+	}
+	if v, ok := raw["enabledPlugins"]; ok {
+		json.Unmarshal(v, &s.EnabledPlugins)
+		delete(raw, "enabledPlugins")
+	}
+	if v, ok := raw["_claudeSwitcherProfile"]; ok {
+		json.Unmarshal(v, &s.ClaudeSwitcherProfile)
+		delete(raw, "_claudeSwitcherProfile")
+	}
+
+	if s.Env == nil {
+		s.Env = make(map[string]string)
+	}
+	if s.EnabledPlugins == nil {
+		s.EnabledPlugins = make(map[string]bool)
+	}
+
+	s.Extra = raw
+	return nil
+}
+
+// MarshalJSON 自定义序列化，保留未知字段
+func (s Settings) MarshalJSON() ([]byte, error) {
+	raw := make(map[string]json.RawMessage)
+
+	// 先放未知字段
+	for k, v := range s.Extra {
+		raw[k] = v
+	}
+
+	// 再放已知字段
+	if len(s.Env) > 0 {
+		v, _ := json.Marshal(s.Env)
+		raw["env"] = v
+	}
+	if len(s.EnabledPlugins) > 0 {
+		v, _ := json.Marshal(s.EnabledPlugins)
+		raw["enabledPlugins"] = v
+	}
+	if s.ClaudeSwitcherProfile != "" {
+		v, _ := json.Marshal(s.ClaudeSwitcherProfile)
+		raw["_claudeSwitcherProfile"] = v
+	}
+
+	return json.Marshal(raw)
 }
 
 // LoadSettings 从文件加载 settings.json
@@ -24,14 +82,6 @@ func LoadSettings(filePath string) (*Settings, error) {
 	var s Settings
 	if err := json.Unmarshal(data, &s); err != nil {
 		return nil, fmt.Errorf("解析 settings.json 失败: %w", err)
-	}
-
-	// 初始化 map 以防 nil
-	if s.Env == nil {
-		s.Env = make(map[string]string)
-	}
-	if s.EnabledPlugins == nil {
-		s.EnabledPlugins = make(map[string]bool)
 	}
 
 	return &s, nil
@@ -79,7 +129,8 @@ func SyncProfileToSettings(filePath, profileName string, envVars map[string]stri
 		}
 	}
 
-	// 更新 env
+	// 清空旧的 env，再写入新 profile 的环境变量
+	s.Env = make(map[string]string)
 	for k, v := range envVars {
 		s.Env[k] = v
 	}
