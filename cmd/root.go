@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/fiftyk/claude-switcher/internal/config"
 	"github.com/fiftyk/claude-switcher/internal/profile"
@@ -71,7 +72,6 @@ func PrintHelp(w *os.File) error {
 用法:
   claude-switcher                    启动交互式配置选择
   claude-switcher <配置名称> [-- <参数...>]  使用指定配置启动，可透传参数
-  claude-switcher <配置名称> --sync         切换配置并同步到 settings.json
   claude-switcher --config <名称> [-- <参数...>] 使用指定配置启动，可透传参数
   claude-switcher --list             列出所有可用配置
   claude-switcher --test <名称>      测试配置有效性
@@ -82,7 +82,6 @@ func PrintHelp(w *os.File) error {
 说明:
   • 配置文件位于: ~/.claude-switcher/profiles/
   • 无参数运行时进入交互式菜单
-  • 使用 --sync 参数可将配置同步到 ~/.claude/settings.json
 `
 	_, err := fmt.Fprint(w, helpText)
 	return err
@@ -137,13 +136,40 @@ func GetActiveProfile() (string, error) {
 	return string(data), nil
 }
 
-// RunClaude 运行 claude CLI
+// RunClaude 运行 claude CLI（使用当前进程环境变量）
 func RunClaude(args ...string) error {
+	return RunClaudeWithEnv(os.Environ(), args...)
+}
+
+// RunClaudeWithEnv 使用指定的环境变量运行 claude CLI
+func RunClaudeWithEnv(env []string, args ...string) error {
 	cmd := exec.Command("claude", args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = os.Environ()
+	cmd.Env = env
 
 	return cmd.Run()
+}
+
+// AppendEnvVars 将 profile 环境变量合并到 base 环境变量中
+// profile 中的变量会覆盖 base 中同名的变量
+func AppendEnvVars(base []string, profileEnv map[string]string) []string {
+	if profileEnv == nil {
+		return base
+	}
+	env := make(map[string]string)
+	for _, e := range base {
+		if idx := strings.Index(e, "="); idx >= 0 {
+			env[e[:idx]] = e[idx+1:]
+		}
+	}
+	for k, v := range profileEnv {
+		env[k] = v
+	}
+	result := make([]string, 0, len(env))
+	for k, v := range env {
+		result = append(result, k+"="+v)
+	}
+	return result
 }

@@ -31,7 +31,6 @@ func main() {
 	// 解析参数
 	configName := flag.String("config", "", "指定配置名称")
 	listFlag := flag.Bool("list", false, "列出所有配置")
-	syncFlag := flag.Bool("sync", false, "同步配置到 settings.json")
 	testFlag := flag.String("test", "", "测试配置")
 	renameFlag := flag.String("rename", "", "重命名配置")
 	copyFlag := flag.String("copy", "", "复制配置")
@@ -73,10 +72,9 @@ func main() {
 	// 处理透传参数（-- 之后的部分）
 	var forwardArgs []string
 	var configNameFromArgs string
-	syncRequested := *syncFlag
 	args := os.Args[1:]
 
-	// 先按 -- 分隔，--sync 只在 -- 之前有效
+	// 先按 -- 分隔
 	var beforeSep, afterSep []string
 	if idx := indexOf(args, "--"); idx >= 0 {
 		beforeSep = args[:idx]
@@ -84,17 +82,7 @@ func main() {
 	} else {
 		beforeSep = args
 	}
-
-	// 从 -- 之前的参数中检测并移除 --sync
-	var filteredArgs []string
-	for _, arg := range beforeSep {
-		if arg == "--sync" {
-			syncRequested = true
-		} else {
-			filteredArgs = append(filteredArgs, arg)
-		}
-	}
-	args = filteredArgs
+	args = beforeSep
 	forwardArgs = afterSep
 
 	// 解析配置名称
@@ -162,15 +150,6 @@ func main() {
 			os.Exit(1)
 		}
 
-		// 仅在指定 --sync 时同步配置到 settings.json
-		if syncRequested {
-			if err := cmd.SyncToSettings(configNameFromArgs, p); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: 同步到 settings.json 失败: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Println("✓ 已同步到 settings.json")
-		}
-
 		// 设置活动配置
 		if err := setActiveProfile(configNameFromArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -178,7 +157,7 @@ func main() {
 		}
 
 		fmt.Printf("使用配置: %s\n", configNameFromArgs)
-		runClaude(forwardArgs...)
+		runClaude(p, forwardArgs...)
 		return
 	default:
 		showHelp()
@@ -200,7 +179,6 @@ func showHelp() {
 用法:
   claude-switcher                    启动交互式配置选择
   claude-switcher <配置名称> [-- <参数...>]  使用指定配置启动，可透传参数
-  claude-switcher <配置名称> --sync   切换配置并同步到 settings.json
   claude-switcher --config <名称> [-- <参数...>] 使用指定配置启动，可透传参数
   claude-switcher --list             列出所有可用配置
   claude-switcher --test <名称>      测试配置有效性
@@ -214,7 +192,7 @@ func showHelp() {
 说明:
   • 配置文件位于: ~/.claude-switcher/profiles/
   • 无参数运行时进入交互式菜单
-  • 使用 --sync 参数可将配置同步到 ~/.claude/settings.json
+  • 运行配置时会自动注入环境变量
   • 使用 --check-update 或 --self-update 管理程序更新
 
 `, appName, version)
@@ -293,7 +271,7 @@ func setActiveProfile(name string) error {
 	return os.WriteFile(activeFile, []byte(name), 0600)
 }
 
-func runClaude(args ...string) {
+func runClaude(p *profile.Profile, args ...string) {
 	// 检查 claude 是否安装
 	if _, err := os.Stat("/usr/local/bin/claude"); err != nil {
 		// 尝试在 PATH 中查找
@@ -304,12 +282,15 @@ func runClaude(args ...string) {
 	}
 
 	// 构建命令
-	cmdArgs := append([]string{}, args...)
-	runCmd := exec.Command("claude", cmdArgs...)
+	runCmd := exec.Command("claude", args...)
 	runCmd.Stdin = os.Stdin
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
-	runCmd.Env = os.Environ()
+
+	// 注入 profile 环境变量
+	profileEnv := cmd.BuildEnvVarsFromProfile(p)
+	baseEnv := os.Environ()
+	runCmd.Env = cmd.AppendEnvVars(baseEnv, profileEnv)
 
 	if err := runCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

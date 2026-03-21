@@ -17,9 +17,9 @@ var ErrQuit = errors.New("user quit")
 // runClaudeFunc 用于运行 claude CLI，可被测试 mock
 var runClaudeFunc = defaultRunClaude
 
-// defaultRunClaude 默认的 RunClaude 实现
-func defaultRunClaude() error {
-	return RunClaude()
+// defaultRunClaude 默认的 RunClaudeWithEnv 实现
+func defaultRunClaude(env []string) error {
+	return RunClaudeWithEnv(env)
 }
 
 // syncToSettingsFunc 用于同步到 settings.json，可被测试 mock
@@ -55,7 +55,7 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 		return ErrQuit
 
 	case ActionRun:
-		// 运行配置（不自动同步到 settings.json）
+		// 运行配置（注入 profile 环境变量）
 		p, err := profile.LoadProfile(profilesDir, name)
 		if err != nil {
 			return fmt.Errorf("加载配置失败: %w", err)
@@ -66,7 +66,10 @@ func HandleMenuAction(profilesDir string, action MenuAction, name string, handle
 		}
 
 		fmt.Printf("使用配置: %s\n", p.Name)
-		return runClaudeFunc()
+		profileEnv := BuildEnvVarsFromProfile(p)
+		baseEnv := os.Environ()
+		mergedEnv := AppendEnvVars(baseEnv, profileEnv)
+		return runClaudeFunc(mergedEnv)
 
 	case ActionSync:
 		// 同步配置到 settings.json

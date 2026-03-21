@@ -4,7 +4,7 @@
 
 Claude Switcher 是一个 Go 语言开发的 CLI 工具，用于管理和切换 Claude Code 的配置。支持：
 - 多配置管理（存储在 `~/.claude-switcher/profiles/`）
-- 配置同步到 `~/.claude/settings.json`
+- 运行时自动注入环境变量到 claude CLI
 - 参数透传给 claude CLI
 
 ## 常用命令
@@ -125,8 +125,7 @@ cz bump
 ```bash
 # 基本用法
 claude-switcher                    # 交互式配置选择
-claude-switcher work               # 使用指定配置启动
-claude-switcher work --sync        # 切换并同步到 settings.json
+claude-switcher work               # 使用指定配置启动（自动注入环境变量）
 claude-switcher work -- -p "提示词" # 透传参数给 claude CLI
 
 # 管理命令

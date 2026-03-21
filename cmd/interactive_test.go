@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fiftyk/claude-switcher/internal/profile"
@@ -34,8 +35,8 @@ func (m *mockMenuHandler) SetActiveProfile(name string) error {
 
 // TestHandleMenuAction_Quit 测试退出操作
 func TestHandleMenuAction_Quit(t *testing.T) {
-	// Mock RunClaude 和 SyncToSettings
-	runClaudeFunc = func() error { return nil }
+	// Mock RunClaudeWithEnv 和 SyncToSettings
+	runClaudeFunc = func(env []string) error { return nil }
 	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { return nil }
 	defer func() {
 		runClaudeFunc = defaultRunClaude
@@ -55,9 +56,9 @@ func TestHandleMenuAction_Quit(t *testing.T) {
 
 // TestHandleMenuAction_Run 测试运行操作（不应自动同步到 settings.json）
 func TestHandleMenuAction_Run(t *testing.T) {
-	// Mock RunClaude 和 SyncToSettings
+	// Mock RunClaudeWithEnv 和 SyncToSettings
 	syncCalled := false
-	runClaudeFunc = func() error { return nil }
+	runClaudeFunc = func(env []string) error { return nil }
 	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { syncCalled = true; return nil }
 	defer func() {
 		runClaudeFunc = defaultRunClaude
@@ -93,6 +94,58 @@ func TestHandleMenuAction_Run(t *testing.T) {
 	}
 	if syncCalled {
 		t.Error("expected SyncToSettings NOT to be called during ActionRun")
+	}
+}
+
+// TestHandleMenuAction_Run_PassesEnvVars tests that ActionRun passes profile env vars to runClaudeFunc
+func TestHandleMenuAction_Run_PassesEnvVars(t *testing.T) {
+	var capturedEnv []string
+	runClaudeFunc = func(env []string) error {
+		capturedEnv = env
+		return nil
+	}
+	defer func() { runClaudeFunc = defaultRunClaude }()
+
+	profilesDir := t.TempDir()
+	profileContent := `NAME="envtest"
+ANTHROPIC_AUTH_TOKEN="sk-envtest"
+ANTHROPIC_BASE_URL="https://envtest.example.com"
+http_proxy="http://envproxy:3128"
+`
+	if err := os.WriteFile(filepath.Join(profilesDir, "envtest.conf"), []byte(profileContent), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := &mockMenuHandler{
+		returnAction: ActionRun,
+		returnName:   "envtest",
+	}
+
+	err := HandleMenuAction(profilesDir, ActionRun, "envtest", handler)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	// Verify profile env vars were passed to runClaudeFunc
+	if capturedEnv == nil {
+		t.Fatal("capturedEnv is nil, runClaudeFunc was not called with env slice")
+	}
+
+	envMap := make(map[string]string)
+	for _, e := range capturedEnv {
+		if idx := strings.Index(e, "="); idx >= 0 {
+			envMap[e[:idx]] = e[idx+1:]
+		}
+	}
+
+	if envMap["ANTHROPIC_AUTH_TOKEN"] != "sk-envtest" {
+		t.Errorf("ANTHROPIC_AUTH_TOKEN in env = %q, want %q", envMap["ANTHROPIC_AUTH_TOKEN"], "sk-envtest")
+	}
+	if envMap["ANTHROPIC_BASE_URL"] != "https://envtest.example.com" {
+		t.Errorf("ANTHROPIC_BASE_URL in env = %q, want %q", envMap["ANTHROPIC_BASE_URL"], "https://envtest.example.com")
+	}
+	if envMap["http_proxy"] != "http://envproxy:3128" {
+		t.Errorf("http_proxy in env = %q, want %q", envMap["http_proxy"], "http://envproxy:3128")
 	}
 }
 
@@ -236,8 +289,12 @@ func TestHandleMenuAction_Export(t *testing.T) {
 // TestHandleMenuAction_LoadProfileError 测试加载配置错误
 func TestHandleMenuAction_LoadProfileError(t *testing.T) {
 	// Mock SyncToSettings
+	runClaudeFunc = func(env []string) error { return nil }
 	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { return nil }
-	defer func() { syncToSettingsFunc = defaultSyncToSettings }()
+	defer func() {
+		runClaudeFunc = defaultRunClaude
+		syncToSettingsFunc = defaultSyncToSettings
+	}()
 
 	profilesDir := t.TempDir()
 	handler := &mockMenuHandler{
@@ -254,8 +311,12 @@ func TestHandleMenuAction_LoadProfileError(t *testing.T) {
 // TestHandleMenuAction_SetActiveProfileError 测试设置活动配置错误
 func TestHandleMenuAction_SetActiveProfileError(t *testing.T) {
 	// Mock SyncToSettings
+	runClaudeFunc = func(env []string) error { return nil }
 	syncToSettingsFunc = func(profileName string, p *profile.Profile) error { return nil }
-	defer func() { syncToSettingsFunc = defaultSyncToSettings }()
+	defer func() {
+		runClaudeFunc = defaultRunClaude
+		syncToSettingsFunc = defaultSyncToSettings
+	}()
 
 	profilesDir := t.TempDir()
 

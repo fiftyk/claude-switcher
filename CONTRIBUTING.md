@@ -68,11 +68,11 @@ cz bump
 ### 示例
 
 ```
-feat: 添加配置同步到 settings.json 功能
+feat: 添加配置导入导出功能
 
-- 使用 --sync 参数同步配置
-- 自动保留 settings.json 中的其他配置
-- 添加 _claudeSwitcherProfile 标记
+- 支持 JSON/YAML/Shell 格式导出
+- 交互式导入向导
+- 自动验证导入配置有效性
 
 Closes #123
 ```

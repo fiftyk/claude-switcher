@@ -7,7 +7,7 @@
 - **交互式菜单** - 运行 `claude-switcher` 进入可视化菜单，可浏览、选择、创建、编辑、删除配置
 - **一键启动** - 运行 `claude-switcher` 即可开始使用
 - **命令行参数** - 支持 `claude-switcher moonshot` 直接指定配置启动
-- **配置同步** - 使用 `--sync` 将配置同步到 `~/.claude/settings.json`
+- **环境变量注入** - 运行时自动将配置中的环境变量注入到 claude CLI
 - **配置管理** - 创建、重命名、复制、删除 Claude 配置
 - **配置验证** - 自动验证 URL 格式、代理设置等配置有效性
 - **快速切换** - 自动记住上次使用的配置，按回车快速启动
@@ -50,9 +50,6 @@ claude-switcher
 # 直接指定配置启动
 claude-switcher moonshot
 claude-switcher --config work
-
-# 同步配置到 settings.json (新功能!)
-claude-switcher moonshot --sync
 
 # 列出所有配置
 claude-switcher --list
@@ -108,26 +105,6 @@ claude-switcher anyrouter -- --temperature 0.7 --max-tokens 1000
 
 # 进入选择菜单后透传参数
 claude-switcher -- --version
-```
-
-### 新功能：同步到 settings.json
-
-使用 `--sync` 参数可以将当前配置同步到 `~/.claude/settings.json`，使配置持久化：
-
-```bash
-# 切换配置并同步到 settings.json
-claude-switcher work --sync
-
-# 验证同步结果
-cat ~/.claude/settings.json
-# 输出示例：
-# {
-#   "env": {
-#     "ANTHROPIC_AUTH_TOKEN": "sk-...",
-#     "ANTHROPIC_BASE_URL": "https://api.example.com"
-#   },
-#   "_claudeSwitcherProfile": "work"
-# }
 ```
 
 ## 配置文件
