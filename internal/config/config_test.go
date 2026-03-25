@@ -52,6 +52,24 @@ func TestEnsureConfigDir(t *testing.T) {
 	}
 }
 
+func TestEnsureConfigDir_CreatesProfilesSubdir(t *testing.T) {
+	// 测试 EnsureConfigDir 同时创建 profiles 子目录
+	tmpDir := t.TempDir()
+	originalConfigDir := ConfigDir
+	ConfigDir = filepath.Join(tmpDir, ".claude-switcher")
+	defer func() { ConfigDir = originalConfigDir }()
+
+	if err := EnsureConfigDir(); err != nil {
+		t.Errorf("EnsureConfigDir() error = %v", err)
+	}
+
+	// 确保 profiles 子目录也存在
+	profilesDir := GetProfilesDir()
+	if _, err := os.Stat(profilesDir); os.IsNotExist(err) {
+		t.Errorf("EnsureConfigDir() did not create profiles subdirectory: %v", profilesDir)
+	}
+}
+
 func TestValidateConfigName(t *testing.T) {
 	tests := []struct {
 		name    string

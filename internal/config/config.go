@@ -32,7 +32,14 @@ func GetActiveFile() string {
 func EnsureConfigDir() error {
 	dir := GetConfigDir()
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		return os.MkdirAll(dir, 0700)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
+	}
+	// 确保 profiles 子目录也存在
+	profilesDir := GetProfilesDir()
+	if _, err := os.Stat(profilesDir); os.IsNotExist(err) {
+		return os.MkdirAll(profilesDir, 0700)
 	}
 	return nil
 }
